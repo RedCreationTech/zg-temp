@@ -623,6 +623,238 @@ AI 四轮模拟结果
 
 因此完成陪练后，团队能力画像和辅导优先级会随前端状态变化。
 
+## 本轮 Scale Decision → Scale Execution Plan
+
+当 Scale Gate 最终选择：
+
+```text
+有条件扩展 1 个区域
+或
+批准扩展到下一地区
+```
+
+系统会自动生成独立的：
+
+```text
+Scale Execution Plan
+30 / 60 / 90 Days
+```
+
+如果选择：
+
+```text
+继续当前区域验证
+```
+
+则不会生成扩区计划。
+
+### 计划固定在当次 Scale Decision
+
+Scale Execution Plan 会记录：
+
+- Scale Decision ID
+- 目标区域
+- 区域相似度
+- 当前数据准备度
+- 首批医院
+- 首批代表
+- 复制 Agent
+- 30 / 60 / 90 天任务
+- Day 30 / 60 / 90 Management Gate
+
+因此后续切换其他候选区域，不会偷偷改变已经做出的执行计划。
+
+如需覆盖，可以点击：
+
+```text
+重新生成计划
+```
+
+### 0–30 天
+
+目标：
+
+```text
+复制最小可运行闭环
+```
+
+重点：
+
+- 确认首批目标医院和 Top Lever
+- 完成医院 / 医生 / 代表主数据准备
+- 完成首批代表能力基线
+- 启用 Hospital + Doctor + Coaching Agent
+- 每名首批代表完成至少 2 次真实拜访闭环
+
+Day 30 Gate：
+
+```text
+主数据完整 ≥90%
++
+首批代表完成真实闭环
+```
+
+### 31–60 天
+
+目标：
+
+```text
+证明行动与管理闭环
+```
+
+重点：
+
+- 每周运行 30 分钟 Coaching Agenda
+- 启用 Director Cockpit
+- 提高 NBA → Action 转化
+- 建立 Outcome 记录纪律
+- 连续运行 Weekly Review
+
+Day 60 Gate：
+
+```text
+NBA 采纳 ≥70%
+Action 完成 ≥70%
+至少 2 类正向 Outcome 可复现
+```
+
+### 61–90 天
+
+目标：
+
+```text
+证明打法可复制
+```
+
+重点：
+
+- Champion Pattern 跨场景复现
+- 形成 Decision Rule 候选
+- 输出区域 Executive Brief
+- 评估第二批医院 / 代表
+- 召开 Day 90 Scale Review
+
+Day 90 Gate：
+
+```text
+至少 1 个 Champion Pattern
+在 2–3 个同类场景复现
+```
+
+### 首批医院
+
+不同候选区域会生成不同目标医院。
+
+“有条件扩展”默认先选：
+
+```text
+2 家医院
+```
+
+“批准扩区”默认选择：
+
+```text
+3 家医院
+```
+
+避免一开始全面铺开。
+
+### 首批代表
+
+“有条件扩展”：
+
+```text
+3 名首批代表
+```
+
+“批准扩区”：
+
+```text
+最多 5 名首批 / 第二批代表
+```
+
+每个人都会展示：
+
+- Baseline Score
+- 训练重点
+- 首批 / 第二批角色
+
+### Agent 复制顺序
+
+不是所有 Agent 第一天一起上线。
+
+当前顺序：
+
+```text
+D0–30
+Hospital Agent
+Doctor Agent
+Coaching Agent
+
+D31–60
+Director Cockpit
+
+D31–90
+Learning Engine
+Weekly / Executive Brief
+```
+
+先跑行动闭环，再复制管理与组织学习。
+
+### 数据准备清单
+
+Scale Plan 会检查：
+
+- 医院主数据
+- 医生画像
+- 代表能力基线
+- 医学证据版本 / Scope
+- Action / Outcome / Coaching / Decision Trace
+- 跨部门资源映射
+
+所有清单都可以在纯前端中逐项勾选。
+
+### 执行进度
+
+30 / 60 / 90 天任务都可点击完成。
+
+页面实时显示：
+
+```text
+阶段进度
++
+总执行进度
++
+Day 30 / 60 / 90 Gate 完成度
+```
+
+### Executive Brief 联动
+
+如果已有 Scale Execution Plan，Executive Brief 的 Scale 区域会同时显示：
+
+```text
+进入 Scale Gate
+查看 90 天执行计划
+```
+
+因此当前完整链路变为：
+
+```text
+Executive Brief
+↓
+Scale Gate
+↓
+Conditional Expand / Scale
+↓
+Scale Execution Plan
+↓
+Day 30 Launch Gate
+↓
+Day 60 Value Gate
+↓
+Day 90 Scale Review
+```
+
 ## 本轮 Executive Brief → Pilot Scale Decision
 
 Pilot Operations 现在增加正式的：
