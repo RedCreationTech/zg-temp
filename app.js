@@ -98,6 +98,9 @@
     managerReviewClosed: saved.managerReviewClosed || false,
     weeklyDecisionBrief: saved.weeklyDecisionBrief || null,
     briefMode: saved.briefMode || "manager",
+    scaleGateTarget: saved.scaleGateTarget || "east2",
+    scaleGateDecision: saved.scaleGateDecision || null,
+    scaleGateHistory: saved.scaleGateHistory || [],
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -148,6 +151,9 @@
       managerReviewClosed: state.managerReviewClosed,
       weeklyDecisionBrief: state.weeklyDecisionBrief,
       briefMode: state.briefMode,
+      scaleGateTarget: state.scaleGateTarget,
+      scaleGateDecision: state.scaleGateDecision,
+      scaleGateHistory: state.scaleGateHistory,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -1837,6 +1843,7 @@
       '<section class="executive-grid"><div class="executive-card"><span>MANAGEMENT ATTENTION</span><h3>需要继续关注</h3><div class="executive-attention">' + attention.map(function(a){return '<div><b>' + esc(a.object) + '</b><p>' + esc(a.question) + '</p><small>' + esc(a.recommendation) + '</small></div>';}).join("") + '</div></div>' +
       '<div class="executive-card"><span>CHAMPION PATTERN</span><h3>值得复制</h3>' + (b.champion ? '<div class="executive-champion"><strong>' + esc(b.champion.name) + '</strong><p>' + esc(b.champion.strength) + '</p><small>承诺率 ' + esc(b.champion.commitmentRate) + '% · NBA ' + esc(b.champion.nbaCompletion) + '%</small></div>' : '<div class="brief-muted">暂无可复制打法</div>') + '</div></section>' +
       '<section class="executive-next"><div><span>NEXT WEEK</span><h2>下周只做 ' + (b.next || []).length + ' 件事</h2></div><div class="executive-next-grid">' + (b.next || []).map(function(item,i){return '<div><span>0' + (i+1) + '</span><strong>' + esc(item.title) + '</strong><p>' + esc(item.owner) + ' · ' + esc(item.success) + '</p></div>';}).join("") + '</div></section>' +
+      renderExecutiveScaleSignal() +
       '<footer class="brief-footer"><div><span>EXECUTIVE PRINCIPLE</span><strong>少看更多数据, 只确认最重要的变化、判断和下一步.</strong></div><div><span>SNAPSHOT ID</span><strong>' + esc(b.id) + '</strong></div></footer></div>';
   }
 
@@ -2667,6 +2674,157 @@
     return panel("语音复盘入口", "说完即记录 → 转写 → 结构化诊断 → 生成下一次行动", body);
   }
 
+  function scaleGateTargets() {
+    return [
+      { id:"east2", name:"华东二区", similarity:92, data:84, effort:"低", reason:"医院结构与当前 Pilot 最接近, 可直接复制 Hospital + Coaching 闭环." },
+      { id:"central1", name:"华中一区", similarity:78, data:72, effort:"中", reason:"业务问题接近, 但主数据与代表能力基线需要先补齐." },
+      { id:"southcore", name:"华南核心城市", similarity:68, data:61, effort:"高", reason:"商业结构差异更大, 不建议作为第一批 Scale 区域." }
+    ];
+  }
+
+  function scaleGateModel() {
+    var pm = computePilotMetrics();
+    var loopScore = Math.round((pm.actionCompletion + pm.reviewCoverage + pm.outcomeRate) / 3);
+    var directorCount = Object.keys(state.managementDecisions || {}).length;
+    var managementScore = Math.min(100,
+      42 +
+      directorCount * 9 +
+      (state.managerReviewClosed ? 14 : 0) +
+      (state.weeklyDecisionBrief ? 10 : 0)
+    );
+    var briefChampion = state.weeklyDecisionBrief && state.weeklyDecisionBrief.champion;
+    var repeatabilityScore = Math.min(100,
+      48 +
+      (state.teamPlaybook ? 18 : 0) +
+      Math.min(18, Number(pm.ruleReuse || 0) * 2) +
+      (briefChampion ? 10 : 0)
+    );
+
+    var criteria = [
+      { id:"market", label:"Market Proof", score:pm.marketProof, target:80, required:true, why:"客户愿意继续投入, 经理持续参与, 业务问题足够刚性." },
+      { id:"product", label:"Product Proof", score:pm.productProof, target:80, required:true, why:"NBA 被采纳, Action 被执行, Outcome 能回流." },
+      { id:"data", label:"Data Readiness", score:pm.dataReadiness, target:80, required:true, why:"医院 / 医生 / 行动 / Outcome 数据可以支持跨区复制." },
+      { id:"loop", label:"Operating Loop", score:loopScore, target:72, required:true, why:"Action Completion + Review Coverage + Outcome Rate 已形成稳定周循环." },
+      { id:"management", label:"Management Closure", score:managementScore, target:75, required:true, why:"周度 Review、总监决策与 Brief 已形成闭环." },
+      { id:"repeatability", label:"Repeatability", score:repeatabilityScore, target:75, required:false, why:"Champion Pattern / Team Playbook / Rule 已有可复制证据." }
+    ];
+
+    criteria.forEach(function(item){ item.passed = Number(item.score) >= Number(item.target); });
+    var required = criteria.filter(function(item){ return item.required; });
+    var requiredPassed = required.filter(function(item){ return item.passed; }).length;
+    var passed = criteria.filter(function(item){ return item.passed; }).length;
+    var blockers = criteria.filter(function(item){ return item.required && !item.passed; });
+    var maturityReady = Number(state.pilotWeek || 4) >= 7;
+
+    var recommendation = "hold";
+    if (maturityReady && requiredPassed === required.length && criteria[5].passed) recommendation = "scale";
+    else if (maturityReady && requiredPassed >= required.length - 1 && passed >= 4) recommendation = "conditional";
+
+    var overall = Math.round(criteria.reduce(function(sum,item){ return sum + Number(item.score || 0); },0) / criteria.length);
+    return {
+      pm:pm,
+      criteria:criteria,
+      requiredPassed:requiredPassed,
+      requiredTotal:required.length,
+      passed:passed,
+      total:criteria.length,
+      blockers:blockers,
+      maturityReady:maturityReady,
+      recommendation:recommendation,
+      overall:overall
+    };
+  }
+
+  function scaleDecisionMeta(key) {
+    return {
+      hold:{ label:"继续当前区域验证", tone:"hold", note:"不扩区, 继续补齐关键证据." },
+      conditional:{ label:"有条件扩展 1 个区域", tone:"conditional", note:"只扩一个相似区域, 同时保留 Gate 约束." },
+      scale:{ label:"批准扩展到下一地区", tone:"scale", note:"进入复制阶段, 启动下一地区落地." }
+    }[key] || { label:"未决策", tone:"hold", note:"" };
+  }
+
+  function scaleDecisionAllowed(key, gate) {
+    if (key === "hold") return true;
+    if (!gate.maturityReady) return false;
+    if (key === "conditional") return gate.recommendation === "conditional" || gate.recommendation === "scale";
+    if (key === "scale") return gate.recommendation === "scale";
+    return false;
+  }
+
+  function commitScaleGateDecision(key) {
+    var gate = scaleGateModel();
+    if (!scaleDecisionAllowed(key, gate)) {
+      showToast(key === "scale" ? "当前 Gate 尚未满足批准扩区条件" : "当前 Gate 尚不支持有条件扩展");
+      return;
+    }
+    var target = scaleGateTargets().find(function(t){ return t.id === state.scaleGateTarget; }) || scaleGateTargets()[0];
+    var meta = scaleDecisionMeta(key);
+    var snapshot = {
+      id:"scale-" + Date.now(),
+      decision:key,
+      label:meta.label,
+      target:key === "hold" ? "当前区域" : target.name,
+      targetId:key === "hold" ? null : target.id,
+      overall:gate.overall,
+      passed:gate.passed,
+      total:gate.total,
+      blockers:gate.blockers.map(function(b){ return b.label; }),
+      pilotWeek:Number(state.pilotWeek || 4),
+      at:new Date().toISOString()
+    };
+    state.scaleGateDecision = snapshot;
+    state.scaleGateHistory.unshift(snapshot);
+    state.scaleGateHistory = state.scaleGateHistory.slice(0,8);
+    saveState();
+    render();
+    showToast(meta.label + (key === "hold" ? "" : " · " + target.name));
+  }
+
+  function renderScaleGate() {
+    var gate = scaleGateModel();
+    var recMeta = scaleDecisionMeta(gate.recommendation);
+    var criteria = gate.criteria.map(function(item){
+      var cls = item.passed ? "passed" : (item.required ? "blocked" : "watch");
+      return '<div class="scale-criterion ' + cls + '"><div class="scale-criterion-head"><div><span>' + (item.required ? "REQUIRED" : "EVIDENCE") + '</span><strong>' + esc(item.label) + '</strong></div><b>' + item.score + '</b></div><div class="bar"><i style="width:' + Math.min(100,item.score) + '%"></i></div><p>' + esc(item.why) + '</p><small>Gate ≥ ' + item.target + ' · ' + (item.passed ? "已通过" : "未通过") + '</small></div>';
+    }).join("");
+
+    var blockers = gate.blockers.length
+      ? gate.blockers.map(function(b){ return '<span>' + esc(b.label) + ' ' + b.score + '/' + b.target + '</span>'; }).join("")
+      : '<span class="clear">关键门槛已全部通过</span>';
+
+    var targets = scaleGateTargets().map(function(t){
+      var selected = state.scaleGateTarget === t.id;
+      return '<button class="scale-target ' + (selected ? "selected" : "") + '" data-scale-target="' + t.id + '"><div><span>相似度 ' + t.similarity + '%</span><strong>' + esc(t.name) + '</strong></div><b>数据 ' + t.data + '% · 复制成本 ' + esc(t.effort) + '</b><p>' + esc(t.reason) + '</p></button>';
+    }).join("");
+
+    var decisions = ["hold","conditional","scale"].map(function(key){
+      var meta = scaleDecisionMeta(key);
+      var allowed = scaleDecisionAllowed(key,gate);
+      var selected = state.scaleGateDecision && state.scaleGateDecision.decision === key;
+      return '<button class="scale-decision ' + meta.tone + (selected ? " selected" : "") + '" data-scale-decision="' + key + '" ' + (!allowed ? "disabled" : "") + '><span>' + (selected ? "✓ 已决策" : "DECISION") + '</span><strong>' + esc(meta.label) + '</strong><p>' + esc(meta.note) + '</p></button>';
+    }).join("");
+
+    var current = state.scaleGateDecision
+      ? '<div class="scale-current-decision"><span>当前 Scale Decision</span><strong>' + esc(state.scaleGateDecision.label) + '</strong><p>' + esc(state.scaleGateDecision.target) + ' · Gate ' + state.scaleGateDecision.overall + '% · W' + state.scaleGateDecision.pilotWeek + '</p></div>'
+      : '<div class="scale-current-decision pending"><span>当前 Scale Decision</span><strong>尚未做出最终决策</strong><p>先检查 Gate, 再由管理层明确选择.</p></div>';
+
+    return '<section class="scale-gate" id="scaleGate">' +
+      '<div class="scale-gate-head"><div><span>W8 SCALE GATE</span><h2>这个区域验证通过了吗, 是否应该复制?</h2><p>不是用一个综合分拍脑袋. 关键门槛必须逐项可解释、可回溯.</p></div><div class="scale-gate-status ' + recMeta.tone + '"><span>AI RECOMMENDATION</span><strong>' + esc(recMeta.label) + '</strong><b>' + gate.overall + '%</b></div></div>' +
+      '<div class="scale-maturity ' + (gate.maturityReady ? "ready" : "not-ready") + '"><span>' + (gate.maturityReady ? "✓" : "!") + '</span><div><strong>' + (gate.maturityReady ? "已进入正式 Scale 决策窗口" : "当前仍在 Pilot 运行期") + '</strong><p>' + (gate.maturityReady ? "W7–W8 可以做正式扩区判断." : "推进到 W7 后才允许做“有条件扩展 / 批准扩区”决策.") + '</p></div></div>' +
+      '<div class="scale-criteria-grid">' + criteria + '</div>' +
+      '<div class="scale-blockers"><div><span>BLOCKERS</span><strong>' + gate.requiredPassed + '/' + gate.requiredTotal + ' 个关键门槛通过</strong></div><div>' + blockers + '</div></div>' +
+      '<div class="scale-grid"><div><div class="scale-subhead"><span>NEXT TERRITORY</span><strong>如果扩区, 先去哪?</strong></div><div class="scale-targets">' + targets + '</div></div><div><div class="scale-subhead"><span>MANAGEMENT DECISION</span><strong>最终由管理层做选择</strong></div><div class="scale-decisions">' + decisions + '</div>' + current + '</div></div>' +
+      '<div class="scale-gate-footer"><div><span>Evidence Source</span><strong>Executive Brief + Pilot Metrics + Director Decisions + Outcome + Team Playbook</strong></div><button class="btn ghost" data-scale-to-executive>回到 Executive Brief</button></div>' +
+    '</section>';
+  }
+
+  function renderExecutiveScaleSignal() {
+    var gate = scaleGateModel();
+    var decision = state.scaleGateDecision;
+    var meta = decision ? scaleDecisionMeta(decision.decision) : scaleDecisionMeta(gate.recommendation);
+    return '<section class="executive-scale-signal"><div><span>PILOT SCALE DECISION</span><h3>' + esc(decision ? decision.label : "等待正式 Scale Gate 决策") + '</h3><p>' + (decision ? "目标: " + esc(decision.target) + " · Gate " + decision.overall + "%" : "当前 AI 建议: " + esc(meta.label) + " · Gate " + gate.overall + "%") + '</p></div><div><strong>' + gate.passed + '/' + gate.total + '</strong><span>Gate 已通过</span></div><button class="btn primary no-print" data-enter-scale-gate>进入 Scale Gate</button></section>';
+  }
+
   function renderPilot() {
     var pm = computePilotMetrics();
     var currentWeek = Math.max(1, Math.min(8, Number(state.pilotWeek || 4)));
@@ -2729,7 +2887,8 @@
         panel("GPS Operations", "每周不是看报表, 而是持续跑同一个学习循环",
           '<div class="timeline"><div class="timeline-item done"><span class="timeline-dot"></span><b>周一 · 更新 Context</b><span>医院、医生、事件和资源约束更新.</span></div><div class="timeline-item ' + (currentWeek >= 4 ? 'done' : '') + '"><span class="timeline-dot"></span><b>周三 · Action Review</b><span>检查高优先 NBA 是否真正进入执行.</span></div><div class="timeline-item ' + (pm.outcomes ? 'done' : '') + '"><span class="timeline-dot"></span><b>周五 · Outcome & Rule Review</b><span>复盘有效/无效判断, 更新候选规则.</span></div></div>'
         ) +
-      '</div>';
+      '</div>' +
+      '<div class="mt-16">' + renderScaleGate() + '</div>';
   }
 
   function startAIGeneration(type) {
@@ -3383,6 +3542,48 @@
           showToast("当前还没有 Weekly Decision Brief");
           return;
         }
+        state.route = "weeklybrief";
+        saveState();
+        render();
+        window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-scale-target]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.scaleGateTarget = el.getAttribute("data-scale-target") || "east2";
+        saveState();
+        render();
+      });
+    });
+
+    $$("[data-scale-decision]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        commitScaleGateDecision(el.getAttribute("data-scale-decision"));
+      });
+    });
+
+    $$("[data-enter-scale-gate]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.role = "销售总监";
+        state.pilotWeek = Math.max(7, Number(state.pilotWeek || 4));
+        state.route = "pilot";
+        saveState();
+        render();
+        setTimeout(function(){
+          var gate = $("#scaleGate");
+          if (gate) gate.scrollIntoView({ behavior:"smooth", block:"start" });
+        },60);
+      });
+    });
+
+    $$("[data-scale-to-executive]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (!state.weeklyDecisionBrief) {
+          showToast("还没有 Executive Brief");
+          return;
+        }
+        state.briefMode = "executive";
         state.route = "weeklybrief";
         saveState();
         render();
