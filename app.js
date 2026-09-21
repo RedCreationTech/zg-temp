@@ -42,7 +42,9 @@
     domainSummary: null,
     recentDecisions: [],
     recentNBAs: [],
-    outcomes: []
+    outcomes: [],
+    serverActions: [],
+    ruleValidations: []
   };
 
   var $ = function (selector, root) { return (root || document).querySelector(selector); };
@@ -522,6 +524,8 @@
     }).then(function (result) {
       if (!result) return;
 
+      var acceptedAction = null;
+
       if (result.decision && result.nba) {
         state.recentDecisions.unshift(result.decision);
         state.recentNBAs.unshift(result.nba);
@@ -544,24 +548,36 @@
         }
         var outcomeBtn = $("#recordGeneratedOutcome");
         if (outcomeBtn) {
-          outcomeBtn.style.display = "inline-flex";
-          outcomeBtn.addEventListener("click", function () { openOutcomeRecorder(result.nba); });
+          outcomeBtn.addEventListener("click", function () { openOutcomeRecorder(result.nba, acceptedAction); });
         }
       }
 
-      if (adopt) adopt.addEventListener("click", function () {
-        showToast("AI 建议已采纳. 执行后请回写 Outcome");
-        if (result.nba) {
-          var outcomeBtn = $("#recordGeneratedOutcome");
-          if (outcomeBtn) outcomeBtn.style.display = "inline-flex";
-        } else {
+      if (adopt) adopt.addEventListener("click", async function () {
+        if (!result.nba) {
           closeDrawer();
+          return;
         }
+        adopt.disabled = true;
+        adopt.textContent = "正在创建 Action...";
+        var accepted = await window.ZG_API.acceptNBA(result.nba.id, {
+          actor: state.session && state.session.name,
+          priority: result.decision && result.decision.priorityScore >= 85 ? 1 : 2
+        });
+        acceptedAction = accepted && accepted.action ? accepted.action : null;
+        if (acceptedAction) {
+          state.serverActions.unshift(acceptedAction);
+          state.actionStatus[acceptedAction.id] = acceptedAction.status || "todo";
+          saveState();
+        }
+        adopt.textContent = accepted && accepted.existing ? "Action 已存在" : "已创建 Action";
+        showToast(accepted && accepted.offline ? "离线模式: 已模拟 Action 创建" : "NBA 已采纳并生成正式 Action");
+        var outcomeBtn = $("#recordGeneratedOutcome");
+        if (outcomeBtn) outcomeBtn.style.display = "inline-flex";
       });
     });
   }
 
-  function openOutcomeRecorder(nba) {
+  function openOutcomeRecorder(nba, action) {
     if (!nba || !nba.id) {
       showToast("当前是 Browser Mock 模式, 无服务端 NBA ID");
       return;
@@ -579,6 +595,7 @@
       if (!signal) { showToast("请填写实际业务信号"); return; }
       var result = await window.ZG_API.recordOutcome({
         nbaId: nba.id,
+        actionId: action && action.id ? action.id : null,
         result: $("#outcomeResult").value,
         signal: signal,
         evidence: $("#outcomeEvidence").value.trim(),
@@ -586,8 +603,11 @@
         actor: state.session && state.session.name
       });
       if (result && result.outcome) state.outcomes.unshift(result.outcome);
+      if (result && result.ruleValidations) {
+        state.ruleValidations = result.ruleValidations.concat(state.ruleValidations || []);
+      }
       closeDrawer();
-      showToast(result.offline ? "离线模式: Outcome 仅本地模拟" : "Outcome 已回流 Learning Engine");
+      showToast(result.offline ? "离线模式: Outcome 仅本地模拟" : "Outcome 已回流并生成 RuleValidation");
       refreshDecisionData();
     });
   }
@@ -598,6 +618,10 @@
     state.recentNBAs = trace.nbas || [];
     var outcomeResult = await window.ZG_API.getOutcomes();
     state.outcomes = outcomeResult.outcomes || [];
+    var actionResult = await window.ZG_API.getActions();
+    state.serverActions = actionResult.actions || [];
+    var validationResult = await window.ZG_API.getRuleValidations();
+    state.ruleValidations = validationResult.ruleValidations || [];
     if (state.route === "learning") render();
   }
 
