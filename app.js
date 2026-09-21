@@ -1964,17 +1964,17 @@
       });
     });
 
-    $("[data-live-finish]").forEach(function (el) {
+    $$("[data-live-finish]").forEach(function (el) {
       el.addEventListener("click", finishLiveVisit);
     });
 
-    $("[data-start-three-review]").forEach(function (el) {
+    $$("[data-start-three-review]").forEach(function (el) {
       el.addEventListener("click", function () {
         processVisitAudio(null, true);
       });
     });
 
-    $("[data-review-accept-issue]").forEach(function (el) {
+    $$("[data-review-accept-issue]").forEach(function (el) {
       el.addEventListener("click", function () {
         var review = coachingReviewSession(state.selectedVisit);
         review.issueAccepted = true;
@@ -1984,7 +1984,7 @@
       });
     });
 
-    $("[data-roleplay-choice]").forEach(function (el) {
+    $$("[data-roleplay-choice]").forEach(function (el) {
       el.addEventListener("click", function () {
         var v = data.visits.find(function (x) { return x.id === state.selectedVisit; }) || data.visits[0];
         var session = coachingRoleplaySession(v.id);
@@ -2001,7 +2001,7 @@
       });
     });
 
-    $("[data-roleplay-retry]").forEach(function (el) {
+    $$("[data-roleplay-retry]").forEach(function (el) {
       el.addEventListener("click", function () {
         var session = coachingRoleplaySession(state.selectedVisit);
         session.lastChoice = null;
@@ -2011,7 +2011,7 @@
       });
     });
 
-    $("[data-roleplay-complete]").forEach(function (el) {
+    $$("[data-roleplay-complete]").forEach(function (el) {
       el.addEventListener("click", function () {
         var v = data.visits.find(function (x) { return x.id === state.selectedVisit; }) || data.visits[0];
         var session = coachingRoleplaySession(v.id);
