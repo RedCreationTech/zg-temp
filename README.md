@@ -623,6 +623,160 @@ AI 四轮模拟结果
 
 因此完成陪练后，团队能力画像和辅导优先级会随前端状态变化。
 
+## 本轮 Director Cockpit → Brief 管理闭环
+
+Director Decision Cockpit 现在不再和 Weekly Brief 平行存在。
+
+总监在 Cockpit 里选择：
+
+```text
+加资源
+保持
+纠偏
+升级
+停止
+```
+
+后，系统会同时产生两类影响：
+
+```text
+执行影响
++
+资源变化
+```
+
+例如：
+
+### 华东附一
+
+```text
+加资源
+→
+MDT 场景医学支持进入执行中
+→
+不增加泛化活动预算
+→
+相关医院 Action 保持执行
+```
+
+### 刘晨
+
+```text
+升级
+→
+普通辅导升级为经理结构化 Coaching
+→
+占用本周核心辅导资源
+→
+辅导 Action 进入执行态
+```
+
+### 海川
+
+```text
+停止
+→
+大型活动资源 HOLD
+→
+预算转向影响者地图和决策链信息
+→
+医院 Action 聚焦信息补全
+```
+
+### 滨江
+
+```text
+保持
+→
+保持病例会投入
+→
+48 小时内锁定日期 / 名单 / 病例
+```
+
+Cockpit 页面新增：
+
+```text
+Weekly Brief Impact Preview
+```
+
+展示：
+
+- 当前 Cockpit 有多少项决策
+- 当前 Brief Snapshot 有多少项决策
+- 是否存在待同步变化
+- 每个决策对资源的影响
+
+为了保持周会快照不可被后台操作偷偷改写，Cockpit 决策不会自动覆盖已经关闭的 Brief。
+
+总监需要明确点击：
+
+```text
+同步当前决策到 Brief
+```
+
+系统才会：
+
+```text
+重新生成 Weekly Snapshot
+→
+切换到 Director Brief
+→
+展示新的管理决策与资源变化
+```
+
+### Director Brief 新增
+
+总监版现在增加：
+
+```text
+本周总监决策与资源变化
+```
+
+每项显示：
+
+- 管理动作
+- 决策对象
+- WHY
+- Resource Impact
+- Execution Impact
+
+Territory Comparison 也新增：
+
+```text
+管理动作 / 资源变化
+```
+
+列。
+
+### Executive Brief 新增
+
+Executive 版新增：
+
+```text
+DIRECTOR DECISIONS
+```
+
+只保留最关键的管理动作，例如：
+
+```text
+加资源 · 华东附一
+MDT 医学支持进入执行中
+
+停止 · 海川
+大型活动资源 HOLD
+
+升级 · 刘晨
+升级为结构化 Coaching
+```
+
+Executive Summary 也会自动加入：
+
+```text
+销售总监本周完成 N 项明确管理决策
+```
+
+以及最重要的决策对象和动作。
+
 ## 本轮 Brief 三视图增强
 
 Weekly Decision Brief 现在支持同一份 Snapshot 的三种阅读方式：
