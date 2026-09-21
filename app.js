@@ -312,7 +312,15 @@
   }
 
   function renderDashboard() {
-    var all = data.actions;
+    var scenarioOrder = {
+      hospital_attack: ["a1","a2","a3","a5","a6","a4","a7"],
+      doctor_breakthrough: ["a4","a6","a2","a1","a5","a3","a7"],
+      coaching_recovery: ["a7","a3","a1","a2","a4","a6","a5"]
+    };
+    var order = scenarioOrder[state.demoScenario] || scenarioOrder.hospital_attack;
+    var all = data.actions.slice().sort(function (a, b) {
+      return order.indexOf(a.id) - order.indexOf(b.id);
+    });
     var filtered = state.actionFilter === "all" ? all : all.filter(function (a) { return getActionStatus(a) === state.actionFilter; });
     var done = all.filter(function (a) { return getActionStatus(a) === "done"; }).length;
     var doing = all.filter(function (a) { return getActionStatus(a) === "doing"; }).length;
@@ -325,9 +333,22 @@
       return '<button class="filter-chip ' + (state.actionFilter === f[0] ? "active" : "") + '" data-filter="' + f[0] + '">' + f[1] + '</button>';
     }).join("");
 
+    var insightPrimary = "";
+    var insightSecondary = "";
+    if (state.demoScenario === "doctor_breakthrough") {
+      insightPrimary = '<div class="insight-card"><div class="insight-head"><strong>患者识别是当前最大增长杠杆</strong><span class="insight-tag">Hospital Agent</span></div><p>滨江中心患者量并不缺, 真正的 GAP 是目标患者识别标准不一致. 下一步不是加覆盖, 而是把病例共识会锁定下来.</p><button class="tiny-btn primary" data-route-jump="hospital">查看医院机会</button></div>';
+      insightSecondary = '<div class="insight-card"><div class="insight-head"><strong>医生兴趣已经出现, 现在要推进承诺</strong><span class="insight-tag">Doctor Agent</span></div><p>王静主任已经认可流程问题. 当前最佳动作是确认病例会时间、参与医生和 3 个典型病例.</p><button class="tiny-btn" data-route-jump="doctor">查看医生 NBA</button></div>';
+    } else if (state.demoScenario === "coaching_recovery") {
+      insightPrimary = '<div class="insight-card"><div class="insight-head"><strong>连续 3 次拜访没有形成下一步承诺</strong><span class="insight-tag">Coaching</span></div><p>刘晨的问题不在内容质量, 而在结束阶段没有把“医生觉得不错”推进成具体病例、时间或行为承诺.</p><button class="tiny-btn primary" data-route-jump="coaching">进入拜访辅导</button></div>';
+      insightSecondary = '<div class="insight-card"><div class="insight-head"><strong>本周只修一个动作</strong><span class="insight-tag">Manager Focus</span></div><p>把“好的, 下次再来”替换成一个明确请求: 下次住院组讨论中共同判断 1 例边界患者, 并约定具体时间.</p><button class="tiny-btn" data-route-jump="coaching">查看关键句替换</button></div>';
+    } else {
+      insightPrimary = '<div class="insight-card"><div class="insight-head"><strong>医院机会变化</strong><span class="insight-tag">Hospital Agent</span></div><p>华东附一的机会不在增加拜访频次, 而在周三 MDT 的方案选择节点. 建议把资源从泛化覆盖切换到场景证据.</p><button class="tiny-btn primary" data-route-jump="hospital">查看医院作战</button></div>';
+      insightSecondary = '<div class="insight-card"><div class="insight-head"><strong>需要立即辅导</strong><span class="insight-tag">Coaching</span></div><p>张蕾本次拜访探询质量仅 54 分. 下一次拜访前建议完成一次经理角色演练, 替换开场与关键问题.</p><button class="tiny-btn" data-route-jump="coaching">进入辅导</button></div>';
+    }
+
     var insights =
-      '<div class="insight-card"><div class="insight-head"><strong>医院机会变化</strong><span class="insight-tag">Hospital Agent</span></div><p>华东附一的机会不在增加拜访频次, 而在周三 MDT 的方案选择节点. 建议把资源从泛化覆盖切换到场景证据.</p><button class="tiny-btn primary" data-route-jump="hospital">查看医院作战</button></div>' +
-      '<div class="insight-card"><div class="insight-head"><strong>需要立即辅导</strong><span class="insight-tag">Coaching</span></div><p>张蕾本次拜访探询质量仅 54 分. 下一次拜访前建议完成一次经理角色演练, 替换开场与关键问题.</p><button class="tiny-btn" data-route-jump="coaching">进入辅导</button></div>' +
+      insightPrimary +
+      insightSecondary +
       '<div class="flow-strip">' +
         '<div class="flow-step active"><b>Context</b><span>医院 / 医生</span></div>' +
         '<div class="flow-step active"><b>Decision</b><span>优先级判断</span></div>' +
