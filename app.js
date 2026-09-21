@@ -969,7 +969,7 @@
       return '<div class="metric-card"><div class="metric-top"><span>' + esc(r.name) + '</span><span class="metric-icon">区</span></div><div class="metric-value">' + esc(r.hospitals) + '</div><div class="metric-foot"><span>' + esc(r.manager) + '</span><span> · ' + esc(r.reps) + ' 名代表</span></div></div>';
     }).join("");
     if (!regions) {
-      regions = '<div class="empty-state"><strong>正在加载组织数据</strong><span>浏览器离线模式下仍可使用核心 Agent 原型.</span></div>';
+      regions = '<div class="empty-state"><strong>正在加载组织数据</strong><span>纯前端原型中仍可使用完整 Agent 演示数据.</span></div>';
     }
 
     var users = (org.users || []).map(function (u) {
