@@ -1238,6 +1238,118 @@
     return signals.slice(0,6);
   }
 
+  function managementResourceImpact(risk, decision) {
+    if (!risk) return "";
+    if (risk.id === "m1") {
+      if (decision === "add") return "华东附一 MDT 场景医学支持由“就绪”切换为“执行中”, 不增加泛化活动预算.";
+      if (decision === "keep") return "保持现有 MDT 场景支持强度, 不扩充泛化覆盖.";
+      if (decision === "correct") return "暂不新增资源, 优先纠偏代表动作与证据匹配方式.";
+      if (decision === "escalate") return "增加经理协访与跨部门协同, 把资源集中到周三 MDT.";
+      if (decision === "stop") return "暂停新增 MDT 支持资源, 等待场景重新确认.";
+    }
+    if (risk.id === "m2") {
+      if (decision === "escalate") return "刘晨由普通辅导升级为经理结构化 Coaching, 占用本周核心辅导资源.";
+      if (decision === "correct") return "不增加额外市场资源, 先纠偏结束阶段的 Commitment 行为.";
+      if (decision === "add") return "增加经理陪访 / AI 陪练资源, 直到形成明确客户承诺.";
+      if (decision === "keep") return "保持当前辅导频率, 继续观察下一次真实拜访.";
+      if (decision === "stop") return "停止当前泛化辅导方式, 重新定义单一训练目标.";
+    }
+    if (risk.id === "m3") {
+      if (decision === "stop") return "海川大型活动资源置为 HOLD, 预算转向影响者地图与决策链信息.";
+      if (decision === "add") return "只增加信息采集资源, 不扩大高成本活动.";
+      if (decision === "correct") return "纠偏资源结构: 从活动投入切换到生态图与准入链补全.";
+      if (decision === "keep") return "保持低成本信息采集, 暂不扩大预算.";
+      if (decision === "escalate") return "升级跨部门准入判断, 在资源投入前完成管理层 Review.";
+    }
+    if (risk.id === "m4") {
+      if (decision === "keep") return "保持滨江病例会资源投入, 48 小时内锁定日期、名单和病例.";
+      if (decision === "add") return "增加病例会准备资源, 加速参与医生与病例清单确认.";
+      if (decision === "correct") return "停止泛化跟进, 资源只用于病例会日期与名单确认.";
+      if (decision === "escalate") return "升级经理介入, 直接推动病例会从口头意向进入日历.";
+      if (decision === "stop") return "暂停病例会新增投入, 等待客户重新确认意向.";
+    }
+    return managementLabel(decision) + ": " + risk.action;
+  }
+
+  function managementExecutionImpact(risk, decision) {
+    if (!risk) return "";
+    if (risk.id === "m1") {
+      if (decision === "add" || decision === "keep") return "华东附一相关 Action 进入执行态.";
+      if (decision === "correct") return "周敏 MDT Action 标记为需纠偏.";
+      if (decision === "escalate") return "经理辅导 Action 进入执行态.";
+    }
+    if (risk.id === "m2") {
+      if (decision === "escalate" || decision === "correct") return "刘晨辅导 Action 进入执行态.";
+      if (decision === "stop") return "刘晨辅导 Action 标记为风险.";
+    }
+    if (risk.id === "m3") {
+      if (decision === "stop" || decision === "correct") return "海川影响者地图 Action 被提升为当前执行重点.";
+    }
+    if (risk.id === "m4") {
+      if (decision === "keep" || decision === "add") return "滨江病例会 Action 保持执行.";
+      if (decision === "correct" || decision === "escalate") return "病例会 Action 进入纠偏 / 升级状态.";
+    }
+    return "该管理决策已回写到执行页面.";
+  }
+
+  function collectDirectorDecisionSnapshot() {
+    return Object.keys(state.managementDecisions || {}).map(function(id){
+      var risk = (data.risks || []).find(function(r){ return r.id === id; });
+      var decision = state.managementDecisions[id];
+      if (!risk || !decision) return null;
+      return {
+        riskId:id,
+        object:risk.object,
+        level:risk.level,
+        owner:risk.owner,
+        targetType:risk.targetType,
+        targetId:risk.targetId,
+        decision:decision,
+        label:managementLabel(decision),
+        issue:risk.issue,
+        why:risk.reason,
+        action:risk.action,
+        resourceImpact:managementResourceImpact(risk,decision),
+        executionImpact:managementExecutionImpact(risk,decision)
+      };
+    }).filter(Boolean);
+  }
+
+  function renderCockpitBriefImpact() {
+    var decisions = collectDirectorDecisionSnapshot();
+    var briefCount = state.weeklyDecisionBrief && state.weeklyDecisionBrief.directorDecisions
+      ? state.weeklyDecisionBrief.directorDecisions.length
+      : 0;
+    var current = decisions.length;
+    var changed = current !== briefCount;
+    var items = decisions.slice(0,4).map(function(d){
+      return '<div class="cockpit-brief-impact-item"><span class="management-result ' + esc(d.decision) + '">' + esc(d.label) + '</span><div><strong>' + esc(d.object) + '</strong><p>' + esc(d.resourceImpact) + '</p></div></div>';
+    }).join("");
+    if (!items) items = '<div class="empty-state"><strong>还没有总监管理决策</strong><span>在上方完成管理动作后, 这里会预览对 Weekly Brief 的影响.</span></div>';
+
+    return panel("Weekly Brief Impact Preview", "总监决策会改变资源与执行状态. 只有明确同步后才覆盖已关闭的周会快照",
+      '<div class="cockpit-brief-impact-head"><div><span>当前 Cockpit</span><strong>' + current + ' 项决策</strong></div><div><span>Brief Snapshot</span><strong>' + briefCount + ' 项决策</strong></div><div><span>同步状态</span><strong class="' + (changed ? "warn-text" : "good-text") + '">' + (changed ? "有变化待同步" : "已一致") + '</strong></div></div>' +
+      '<div class="cockpit-brief-impact-list">' + items + '</div>' +
+      '<div class="cockpit-brief-impact-actions"><button class="btn ghost" data-route-jump="' + (state.weeklyDecisionBrief ? "weeklybrief" : "managerreview") + '">' + (state.weeklyDecisionBrief ? "查看当前 Brief" : "进入周度 Review") + '</button><button class="btn primary" data-sync-cockpit-brief ' + (!state.weeklyDecisionBrief ? "disabled" : "") + '>同步当前决策到 Brief</button></div>'
+    );
+  }
+
+  function syncCockpitDecisionsToBrief() {
+    if (!state.weeklyDecisionBrief) {
+      showToast("还没有 Weekly Decision Brief, 请先完成周度 Review");
+      state.route = "managerreview";
+      render();
+      return;
+    }
+    state.weeklyDecisionBrief = createWeeklyDecisionBriefSnapshot();
+    state.briefMode = "director";
+    state.route = "weeklybrief";
+    saveState();
+    render();
+    window.scrollTo({ top:0, behavior:"smooth" });
+    showToast("总监决策与资源变化已同步到 Weekly Brief");
+  }
+
   function createWeeklyDecisionBriefSnapshot() {
     var chain = managerReviewChainStatus();
     var trend = teamTrendStats();
@@ -1305,6 +1417,10 @@
     if (state.teamPlaybook && champion) {
       changes.push(champion.name + " 的高质量拜访结构已被采纳为团队 Playbook 候选.");
     }
+    var directorSnapshot = collectDirectorDecisionSnapshot();
+    if (directorSnapshot.length) {
+      changes.push("销售总监本周已完成 " + directorSnapshot.length + " 项管理决策, 资源与执行优先级已回写到一线页面.");
+    }
 
     var risks = rankedTeamReps().filter(function(rep){
       return rep.runtime.priority >= 80;
@@ -1340,6 +1456,15 @@
       changes:changes.slice(0,5),
       hospitals:hospitals,
       decisions:decisions.slice(0,6),
+      directorDecisions:collectDirectorDecisionSnapshot(),
+      resourceChanges:collectDirectorDecisionSnapshot().map(function(d){
+        return {
+          object:d.object,
+          decision:d.label,
+          impact:d.resourceImpact,
+          execution:d.executionImpact
+        };
+      }),
       outcomes:collectReviewOutcomeSignals(),
       champion:champion ? {
         name:champion.name,
@@ -2259,7 +2384,8 @@
           '<div class="dimension-row"><span>扩展准备度</span><div class="bar"><i style="width:' + pm.scaleReadiness + '%"></i></div><b>' + pm.scaleReadiness + '%</b></div>'
         ) +
       '</div>' +
-      '<div class="mt-16">' + renderManagementHistory() + '</div>';
+      '<div class="mt-16">' + renderManagementHistory() + '</div>' +
+      '<div class="mt-16">' + renderCockpitBriefImpact() + '</div>';
   }
 
   function renderTeamPlaybookLearningSignal() {
@@ -3210,7 +3336,11 @@
       });
     });
 
-    $$("[data-view-weekly-brief]").forEach(function (el) {
+    $("[data-sync-cockpit-brief]").forEach(function (el) {
+      el.addEventListener("click", syncCockpitDecisionsToBrief);
+    });
+
+    $("[data-view-weekly-brief]").forEach(function (el) {
       el.addEventListener("click", function () {
         if (!state.weeklyDecisionBrief) {
           showToast("当前还没有 Weekly Decision Brief");
