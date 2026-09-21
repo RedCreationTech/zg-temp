@@ -954,3 +954,7 @@
   .tower-alert-actions,.tower-whatif-actions,.tower-region-picker,.tower-breadcrumb button{display:none!important}
   .tower-section,.tower-alert,.tower-drill-detail{break-inside:avoid}
 }
+
+.tower-alert.reopened{box-shadow:inset 3px 0 0 #d08a3f}
+.tower-hero-link{margin-top:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;border-radius:7px;padding:6px 9px;font-size:7px;cursor:pointer}
+.tower-hero-link:hover{background:rgba(255,255,255,.14)}
