@@ -12,6 +12,7 @@
     doctor: "医生导航",
     teamcoaching: "团队辅导",
     managerreview: "周度 Review",
+    weeklybrief: "Weekly Decision Brief",
     coaching: "拜访辅导",
     cockpit: "总监驾驶舱",
     pilot: "Pilot 运营",
@@ -95,6 +96,7 @@
     managerReviewPlan: saved.managerReviewPlan || {},
     managerReviewGenerated: saved.managerReviewGenerated || false,
     managerReviewClosed: saved.managerReviewClosed || false,
+    weeklyDecisionBrief: saved.weeklyDecisionBrief || null,
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -143,6 +145,7 @@
       managerReviewPlan: state.managerReviewPlan,
       managerReviewGenerated: state.managerReviewGenerated,
       managerReviewClosed: state.managerReviewClosed,
+      weeklyDecisionBrief: state.weeklyDecisionBrief,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -1203,7 +1206,169 @@
     render();
   }
 
+  function collectReviewOutcomeSignals() {
+    var signals = [];
+    Object.keys(state.liveVisitSessions || {}).forEach(function(id){
+      var s = state.liveVisitSessions[id];
+      if (!s || !s.ended || !s.commitment) return;
+      var rv = (data.repDay && data.repDay.visits || []).find(function(v){ return v.id === id; });
+      signals.push({
+        type:"客户承诺",
+        title: rv ? rv.doctor + " · " + rv.hospital.replace("华东大学附属第一医院","华东附一") : id,
+        signal:s.commitment,
+        evidence:s.notes && s.notes.length ? s.notes[s.notes.length - 1] : "现场拜访回流"
+      });
+    });
+    (state.outcomes || []).slice(0,5).forEach(function(o){
+      signals.push({
+        type:"Outcome",
+        title:(o.targetType || "业务") + ":" + (o.targetId || "-"),
+        signal:o.signal || o.result || "已记录 Outcome",
+        evidence:o.evidence || "AI GPS Outcome"
+      });
+    });
+    if (!signals.length) {
+      signals = [
+        {type:"业务里程碑",title:"滨江中心",signal:"病例共识会获得口头意向",evidence:"赵倩重点拜访"},
+        {type:"行为风险",title:"刘晨",signal:"连续 3 次重点拜访未形成明确下一步",evidence:"Coaching Agent"}
+      ];
+    }
+    return signals.slice(0,6);
+  }
+
+  function createWeeklyDecisionBriefSnapshot() {
+    var chain = managerReviewChainStatus();
+    var trend = teamTrendStats();
+    var agenda = teamAgendaCandidates();
+    var champion = bestTeamPlaybookCandidate();
+    var hospitals = (data.hospitals || []).map(function(h){
+      var progress = reviewActionProgress(h.id);
+      var status = reviewHospitalStatus(h);
+      return {
+        id:h.id,
+        name:h.name.replace("华东大学附属第一医院","华东附一"),
+        target:h.target,
+        lever:h.levers && h.levers[0] ? h.levers[0].title : "",
+        progress:progress.pct,
+        status:status.label,
+        outcome:reviewHospitalOutcome(h)
+      };
+    });
+
+    var decisions = [];
+    Object.keys(state.managementDecisions || {}).forEach(function(id){
+      var risk = (data.risks || []).find(function(r){ return r.id === id; });
+      if (!risk) return;
+      decisions.push({
+        object:risk.object,
+        decision:managementLabel(state.managementDecisions[id]),
+        why:risk.reason,
+        action:risk.action
+      });
+    });
+    agenda.forEach(function(rep){
+      if (!state.coachingAgendaStatus[rep.id]) return;
+      decisions.push({
+        object:rep.name,
+        decision:"完成核心 Coaching",
+        why:rep.issue + " 是本周最值得改进的行为",
+        action:rep.next
+      });
+    });
+
+    var selectedNext = managerReviewPlanItems().filter(function(item){
+      return state.managerReviewPlan[item.id] !== false;
+    }).map(function(item){
+      return {
+        id:item.id,
+        owner:item.owner,
+        title:item.title,
+        why:item.reason,
+        success:item.success,
+        route:item.route
+      };
+    });
+
+    var changes = [];
+    hospitals.forEach(function(h){
+      if (h.progress >= 70) {
+        changes.push(h.name + " 的关键 Action 已推进到 " + h.progress + "%, 当前状态为“" + h.status + "”.");
+      } else if (h.progress > 0) {
+        changes.push(h.name + " 仍处于“" + h.status + "”, 当前 Action 进度 " + h.progress + "%.");
+      }
+    });
+    if (trend.delta !== 0) {
+      changes.push("团队重点拜访均分从 " + trend.previous + " 变为 " + trend.current + ", 净变化 " + (trend.delta > 0 ? "+" : "") + trend.delta + ".");
+    }
+    if (state.teamPlaybook && champion) {
+      changes.push(champion.name + " 的高质量拜访结构已被采纳为团队 Playbook 候选.");
+    }
+
+    var risks = rankedTeamReps().filter(function(rep){
+      return rep.runtime.priority >= 80;
+    }).slice(0,3).map(function(rep){
+      return {
+        object:rep.name,
+        level:rep.runtime.priority >= 90 ? "高" : "中",
+        issue:rep.issue,
+        why:rep.risk,
+        next:rep.next
+      };
+    });
+
+    return {
+      id:"brief-" + Date.now(),
+      week:"W4",
+      period:"2026.09.21",
+      generatedAt:new Date().toISOString(),
+      manager:(data.teamCoaching && data.teamCoaching.manager) || "李明",
+      team:(data.teamCoaching && data.teamCoaching.team) || "华东区核心团队",
+      headline:selectedNext.length
+        ? "本周完成从 Context 到下周 Action 的经营闭环, 下周聚焦 " + selectedNext.length + " 个可验证动作."
+        : "本周 Review 已关闭, 等待确认下周重点.",
+      metrics:{
+        hospital:chain.hospital,
+        action:chain.action,
+        coaching:chain.coaching,
+        outcome:chain.outcome,
+        learning:chain.learning,
+        trendDelta:trend.delta,
+        teamScore:trend.current
+      },
+      changes:changes.slice(0,5),
+      hospitals:hospitals,
+      decisions:decisions.slice(0,6),
+      outcomes:collectReviewOutcomeSignals(),
+      champion:champion ? {
+        name:champion.name,
+        strength:champion.strength,
+        next:champion.next,
+        commitmentRate:champion.commitmentRate,
+        nbaCompletion:champion.nbaCompletion,
+        adopted:!!state.teamPlaybook
+      } : null,
+      risks:risks,
+      next:selectedNext
+    };
+  }
+
+  function regenerateWeeklyDecisionBrief() {
+    state.weeklyDecisionBrief = createWeeklyDecisionBriefSnapshot();
+    saveState();
+    render();
+    showToast("Weekly Decision Brief 已按当前 Review 状态重新生成");
+  }
+
   function closeManagerReview() {
+    if (state.managerReviewClosed) {
+      state.managerReviewClosed = false;
+      state.route = "managerreview";
+      saveState();
+      render();
+      showToast("已重新打开本周 Review");
+      return;
+    }
+
     if (!state.managerReviewGenerated) {
       showToast("请先生成并确认下周计划");
       return;
@@ -1213,10 +1378,14 @@
       showToast("至少确认 3 个下周行动后才能结束 Review");
       return;
     }
-    state.managerReviewClosed = !state.managerReviewClosed;
+
+    state.managerReviewClosed = true;
+    state.weeklyDecisionBrief = createWeeklyDecisionBriefSnapshot();
+    state.route = "weeklybrief";
     saveState();
     render();
-    showToast(state.managerReviewClosed ? "本周 Review 已完成并锁定下周重点" : "已重新打开本周 Review");
+    window.scrollTo({ top:0, behavior:"smooth" });
+    showToast("本周 Review 已关闭, Weekly Decision Brief 已生成");
   }
 
   function renderManagerReviewHospitalTable() {
