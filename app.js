@@ -105,6 +105,9 @@
     scaleExecutionPlan: saved.scaleExecutionPlan || null,
     scaleExecutionChecks: saved.scaleExecutionChecks || {},
     scaleExecutionPhase: saved.scaleExecutionPhase || "d30",
+    scaleExecutionDay: saved.scaleExecutionDay || 18,
+    scaleExecutionRisks: saved.scaleExecutionRisks || {},
+    scaleExecutionGateReviews: saved.scaleExecutionGateReviews || {},
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -161,6 +164,9 @@
       scaleExecutionPlan: state.scaleExecutionPlan,
       scaleExecutionChecks: state.scaleExecutionChecks,
       scaleExecutionPhase: state.scaleExecutionPhase,
+      scaleExecutionDay: state.scaleExecutionDay,
+      scaleExecutionRisks: state.scaleExecutionRisks,
+      scaleExecutionGateReviews: state.scaleExecutionGateReviews,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -2928,9 +2934,191 @@
     state.scaleExecutionPlan = createScaleExecutionPlan(state.scaleGateDecision);
     state.scaleExecutionChecks = {};
     state.scaleExecutionPhase = "d30";
+    state.scaleExecutionDay = 18;
+    state.scaleExecutionRisks = {};
+    state.scaleExecutionGateReviews = {};
     saveState();
     render();
     showToast("Scale Execution Plan 已按当前决策重新生成");
+  }
+
+  function scalePlanAllTasks(plan) {
+    var tasks = [];
+    (plan && plan.phases || []).forEach(function(phase){
+      (phase.tasks || []).forEach(function(task){
+        tasks.push(Object.assign({ phaseId:phase.id, phaseLabel:phase.label }, task));
+      });
+    });
+    return tasks;
+  }
+
+  function scalePhaseWindow(phaseId) {
+    if (phaseId === "d30") return { start:1, end:30 };
+    if (phaseId === "d60") return { start:31, end:60 };
+    return { start:61, end:90 };
+  }
+
+  function scalePlanExpectedProgress(day, phaseId) {
+    var d = Math.max(1,Math.min(90,Number(day || 1)));
+    if (!phaseId) return Math.round(d / 90 * 100);
+    var w = scalePhaseWindow(phaseId);
+    if (d < w.start) return 0;
+    if (d >= w.end) return 100;
+    return Math.round((d - w.start + 1) / (w.end - w.start + 1) * 100);
+  }
+
+  function scalePlanVariance(plan) {
+    var actual = overallScalePlanProgress(plan).pct;
+    var expected = scalePlanExpectedProgress(state.scaleExecutionDay);
+    var delta = actual - expected;
+    var status = delta >= 5 ? "ahead" : (delta >= -8 ? "ontrack" : "behind");
+    return { actual:actual, expected:expected, delta:delta, status:status };
+  }
+
+  function scaleOwnerProgress(plan) {
+    var map = {};
+    scalePlanAllTasks(plan).forEach(function(task){
+      if (!map[task.owner]) map[task.owner] = { owner:task.owner, total:0, done:0, risks:0 };
+      map[task.owner].total += 1;
+      if (state.scaleExecutionChecks[task.id]) map[task.owner].done += 1;
+      if (state.scaleExecutionRisks[task.id]) map[task.owner].risks += 1;
+    });
+    return Object.keys(map).map(function(key){
+      var item = map[key];
+      item.pct = item.total ? Math.round(item.done/item.total*100) : 0;
+      return item;
+    }).sort(function(a,b){
+      if (b.risks !== a.risks) return b.risks-a.risks;
+      return a.pct-b.pct;
+    });
+  }
+
+  function scaleExecutionRiskRegister(plan) {
+    var day = Number(state.scaleExecutionDay || 1);
+    var rows = [];
+    scalePlanAllTasks(plan).forEach(function(task){
+      if (state.scaleExecutionChecks[task.id]) return;
+      var w = scalePhaseWindow(task.phaseId);
+      var manual = state.scaleExecutionRisks[task.id];
+      var delayed = day > w.end;
+      if (!manual && !delayed) return;
+      rows.push({
+        id:task.id,
+        title:task.title,
+        owner:task.owner,
+        phase:task.phaseLabel,
+        type:delayed ? "延期" : "风险",
+        severity:delayed ? "高" : "中",
+        reason:delayed
+          ? "当前模拟执行日 Day " + day + " 已超过 " + task.phaseLabel + " 计划窗口."
+          : "负责人已标记该任务存在执行风险.",
+        action:delayed ? "立即升级到阶段 Gate Review 并明确恢复计划." : "在下一次周度 Review 前确认阻塞原因与 Owner Action."
+      });
+    });
+    return rows;
+  }
+
+  function gatePhaseId(gateId) {
+    return gateId === "g30" ? "d30" : (gateId === "g60" ? "d60" : "d90");
+  }
+
+  function gateDay(gateId) {
+    return gateId === "g30" ? 30 : (gateId === "g60" ? 60 : 90);
+  }
+
+  function gateReviewAvailable(gateId) {
+    return Number(state.scaleExecutionDay || 1) >= gateDay(gateId);
+  }
+
+  function gateReviewMeta(status) {
+    return {
+      pass:{ label:"通过", cls:"pass", note:"进入下一阶段执行." },
+      conditional:{ label:"有条件通过", cls:"conditional", note:"允许继续, 但必须带着明确恢复动作." },
+      hold:{ label:"暂缓", cls:"hold", note:"停止进入下一阶段, 先解决阻塞项." }
+    }[status] || { label:"待 Review", cls:"pending", note:"" };
+  }
+
+  function reviewScaleExecutionGate(gateId,status) {
+    if (!gateReviewAvailable(gateId)) {
+      showToast("当前还未到 " + gateDay(gateId) + " 天 Gate Review 窗口");
+      return;
+    }
+    var plan = state.scaleExecutionPlan;
+    var phaseId = gatePhaseId(gateId);
+    var progress = scalePlanPhaseProgress(plan,phaseId);
+    var risks = scaleExecutionRiskRegister(plan).filter(function(r){ return r.phase === (plan.phases.find(function(p){return p.id===phaseId;})||{}).label; });
+    if (status === "pass" && (progress.pct < 100 || risks.length)) {
+      showToast("存在未完成任务或风险, 不能直接标记“通过”");
+      return;
+    }
+    state.scaleExecutionGateReviews[gateId] = {
+      status:status,
+      label:gateReviewMeta(status).label,
+      at:new Date().toISOString(),
+      day:Number(state.scaleExecutionDay || 1),
+      progress:progress.pct,
+      risks:risks.length
+    };
+    if (gateId === "g30" && status !== "hold") state.scaleExecutionPhase = "d60";
+    if (gateId === "g60" && status !== "hold") state.scaleExecutionPhase = "d90";
+    saveState();
+    render();
+    showToast(gateReviewMeta(status).label + " · " + gateId.toUpperCase());
+  }
+
+  function secondWaveUnlocked() {
+    var g30 = state.scaleExecutionGateReviews && state.scaleExecutionGateReviews.g30;
+    return !!(g30 && (g30.status === "pass" || g30.status === "conditional"));
+  }
+
+  function scaleSecondWave(plan) {
+    var profile = scaleTargetProfile(plan.targetId);
+    var existingHospitals = (plan.hospitals || []).map(function(h){return h.id;});
+    var existingReps = (plan.reps || []).map(function(r){return r.id;});
+    return {
+      hospitals:profile.hospitals.filter(function(h){return existingHospitals.indexOf(h.id)<0;}),
+      reps:profile.reps.filter(function(r){return existingReps.indexOf(r.id)<0;})
+    };
+  }
+
+  function renderScaleExecutionCockpit(plan) {
+    var variance = scalePlanVariance(plan);
+    var owners = scaleOwnerProgress(plan);
+    var risks = scaleExecutionRiskRegister(plan);
+    var varianceLabel = variance.status === "ahead" ? "领先计划" : (variance.status === "behind" ? "落后计划" : "基本按计划");
+    var varianceCls = variance.status === "ahead" ? "good" : (variance.status === "behind" ? "risk" : "mid");
+
+    var ownerRows = owners.map(function(o){
+      return '<div class="scale-owner-row"><div><strong>' + esc(o.owner) + '</strong><span>' + o.done + '/' + o.total + ' 项完成' + (o.risks ? ' · ' + o.risks + ' 风险' : '') + '</span></div><div class="bar"><i style="width:' + o.pct + '%"></i></div><b>' + o.pct + '%</b></div>';
+    }).join("");
+
+    var riskRows = risks.length ? risks.map(function(r){
+      return '<div class="scale-risk-row"><span class="' + (r.severity === "高" ? "high" : "mid") + '">' + esc(r.type) + '</span><div><strong>' + esc(r.title) + '</strong><p>' + esc(r.reason) + '</p><small>' + esc(r.owner) + ' · ' + esc(r.action) + '</small></div></div>';
+    }).join("") : '<div class="brief-muted">当前没有已识别风险或延期.</div>';
+
+    return '<section class="scale-exec-cockpit"><div class="scale-exec-cockpit-head"><div><span>EXECUTION COCKPIT</span><h2>计划 vs 实际</h2><p>执行状态随模拟 Day 和任务完成情况动态变化.</p></div><div class="scale-day-control"><button data-scale-day="-7">−7 天</button><strong>Day ' + state.scaleExecutionDay + '</strong><button data-scale-day="7">+7 天</button></div></div>' +
+      '<div class="scale-exec-metrics"><div><span>计划进度</span><strong>' + variance.expected + '%</strong></div><div><span>实际进度</span><strong>' + variance.actual + '%</strong></div><div class="' + varianceCls + '"><span>偏差</span><strong>' + (variance.delta>0?"+":"") + variance.delta + '%</strong><small>' + varianceLabel + '</small></div><div><span>风险 / 延期</span><strong>' + risks.length + '</strong></div></div>' +
+      '<div class="scale-exec-grid"><div><div class="scale-exec-subhead"><span>OWNER PROGRESS</span><strong>谁正在拖慢计划?</strong></div><div class="scale-owner-list">' + ownerRows + '</div></div><div><div class="scale-exec-subhead"><span>RISK & DELAY</span><strong>需要恢复动作的事项</strong></div><div class="scale-risk-list">' + riskRows + '</div></div></div>' +
+    '</section>';
+  }
+
+  function renderScaleGateReviews(plan) {
+    return '<div class="execution-gates">' + (plan.gates || []).map(function(g){
+      var phaseId = gatePhaseId(g.id);
+      var progress = scalePlanPhaseProgress(plan,phaseId);
+      var review = state.scaleExecutionGateReviews[g.id];
+      var meta = gateReviewMeta(review && review.status);
+      var available = gateReviewAvailable(g.id);
+      return '<article class="execution-gate review ' + meta.cls + '"><div><span>' + esc(g.day) + '</span><strong>' + esc(g.title) + '</strong></div><p>' + esc(g.question) + '</p><small>' + esc(g.pass) + '</small><b>' + progress.pct + '%</b><div class="gate-review-state"><span>' + (review ? esc(review.label) : (available ? "等待管理 Review" : "尚未到窗口")) + '</span>' + (review ? '<small>Day ' + review.day + ' · 风险 ' + review.risks + '</small>' : '') + '</div><div class="gate-review-actions"><button data-scale-gate-review="' + g.id + '" data-scale-gate-status="hold" ' + (!available ? "disabled" : "") + '>暂缓</button><button data-scale-gate-review="' + g.id + '" data-scale-gate-status="conditional" ' + (!available ? "disabled" : "") + '>有条件通过</button><button data-scale-gate-review="' + g.id + '" data-scale-gate-status="pass" ' + (!available ? "disabled" : "") + '>通过</button></div></article>';
+    }).join("") + '</div>';
+  }
+
+  function renderSecondWave(plan) {
+    var unlocked = secondWaveUnlocked();
+    var wave = scaleSecondWave(plan);
+    var hospitals = wave.hospitals.map(function(h){return '<div><span>' + esc(h.tier) + ' 类</span><strong>' + esc(h.name) + '</strong><p>' + esc(h.focus) + '</p></div>';}).join("");
+    var reps = wave.reps.map(function(r){return '<div><span>' + esc(r.role) + '</span><strong>' + esc(r.name) + '</strong><p>' + esc(r.focus) + '</p></div>';}).join("");
+    return '<section class="scale-second-wave ' + (unlocked ? "unlocked" : "locked") + '"><div class="second-wave-head"><div><span>SECOND WAVE</span><h2>' + (unlocked ? "第二批扩展已解锁" : "第二批扩展尚未解锁") + '</h2><p>' + (unlocked ? "Day 30 Gate 已通过, 可以开始准备第二批医院与代表." : "只有 Day 30 Gate 通过 / 有条件通过后才允许扩到第二批.") + '</p></div><b>' + (unlocked ? "UNLOCKED" : "LOCKED") + '</b></div><div class="second-wave-grid"><div><span>候选医院</span><div class="second-wave-items">' + (hospitals || '<div class="brief-muted">当前计划已包含所有候选医院.</div>') + '</div></div><div><span>候选代表</span><div class="second-wave-items">' + (reps || '<div class="brief-muted">当前计划已包含所有候选代表.</div>') + '</div></div></div></section>';
   }
 
   function renderScaleExecutionPlan() {
@@ -3021,6 +3209,9 @@
       state.scaleExecutionPlan = createScaleExecutionPlan(snapshot);
       state.scaleExecutionChecks = {};
       state.scaleExecutionPhase = "d30";
+      state.scaleExecutionDay = 18;
+      state.scaleExecutionRisks = {};
+      state.scaleExecutionGateReviews = {};
     }
     saveState();
     render();
