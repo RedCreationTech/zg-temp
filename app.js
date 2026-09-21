@@ -4153,8 +4153,11 @@
     state.rolloutDecisionLog = state.rolloutDecisionLog.slice(0,30);
   }
 
-  function rolloutAlertState(id) {
-    return (state.rolloutAlertStates || {})[id] || "open";
+  function rolloutAlertState(id,severity) {
+    var stored=(state.rolloutAlertStates || {})[id];
+    if (stored === "resolved") return "reopened";
+    if (stored) return stored;
+    return severity === "high" ? "escalated" : "open";
   }
 
   function updateRolloutAlert(id,status,title) {
@@ -4168,7 +4171,7 @@
     );
     saveState();
     render();
-    showToast(status === "escalated" ? "异常已升级总部" : (status === "resolved" ? "异常已关闭" : "异常已确认"));
+    showToast(status === "escalated" ? "异常已升级总部" : (status === "resolved" ? "关闭请求已记录. 如果底层原因仍存在, Control Tower 会自动重新打开" : "异常已确认"));
   }
 
   function rolloutAlerts() {
@@ -4587,8 +4590,8 @@
   function renderNationalControlTower() {
     var alerts=rolloutAlerts();
     var deps=rolloutDependencies();
-    var open=alerts.filter(function(a){return rolloutAlertState(a.id)!=="resolved";});
-    var escalated=open.filter(function(a){return rolloutAlertState(a.id)==="escalated";}).length;
+    var open=alerts.filter(function(a){return rolloutAlertState(a.id,a.severity)!=="resolved";});
+    var escalated=open.filter(function(a){return rolloutAlertState(a.id,a.severity)==="escalated";}).length;
     var blocked=deps.filter(function(d){return !d.passed;}).length;
     var regions=scalePortfolioRegions();
     var waveRisk=portfolioWaveDefinitions().filter(function(w){
@@ -4596,7 +4599,7 @@
     }).length;
 
     var alertCards=open.map(function(a){
-      var st=rolloutAlertState(a.id);
+      var st=rolloutAlertState(a.id,a.severity);
       return '<article class="tower-alert ' + a.severity + ' ' + st + '"><div class="tower-alert-head"><div><span>' + esc(a.source) + '</span><strong>' + esc(a.title) + '</strong></div><b>' + (a.severity==="high"?"P1":(a.severity==="medium"?"P2":"P3")) + '</b></div><p>' + esc(a.detail) + '</p><small>Owner · ' + esc(a.owner) + ' · Next · ' + esc(a.action) + '</small><div class="tower-alert-actions"><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="acknowledged" ' + (st==="acknowledged"?"disabled":"") + '>确认</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="escalated" ' + (st==="escalated"?"disabled":"") + '>升级</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="resolved">关闭</button></div></article>';
     }).join("");
 
@@ -4605,7 +4608,7 @@
     }).join("");
 
     return '<div class="control-tower-page">' +
-      '<section class="tower-hero"><div><span>NATIONAL ROLLOUT CONTROL TOWER</span><h1>全国推广真正需要盯的不是页面数量, 而是依赖、异常、资源与决策</h1><p>Control Tower 从现有 Pilot、90 天 Scale、Wave Planning、Evidence 和一线 Demo 数据动态汇总, 不建立第二套脱节状态.</p></div><div><strong>' + open.length + '</strong><span>当前异常</span></div></section>' +
+      '<section class="tower-hero"><div><span>NATIONAL ROLLOUT CONTROL TOWER</span><h1>全国推广真正需要盯的不是页面数量, 而是依赖、异常、资源与决策</h1><p>Control Tower 从现有 Pilot、90 天 Scale、Wave Planning、Evidence 和一线 Demo 数据动态汇总, 不建立第二套脱节状态.</p></div><div><strong>' + open.length + '</strong><span>当前异常</span><button class="tower-hero-link" data-route-jump="portfolio">Scale Portfolio</button></div></section>' +
       '<section class="tower-kpis"><div class="' + (open.length?"risk":"good") + '"><span>开放异常</span><strong>' + open.length + '</strong><small>P1/P2/P3</small></div><div class="' + (escalated?"risk":"") + '"><span>已升级总部</span><strong>' + escalated + '</strong><small>需管理层处理</small></div><div class="' + (blocked?"risk":"good") + '"><span>阻塞依赖</span><strong>' + blocked + '</strong><small>共 ' + deps.length + ' 条</small></div><div class="' + (waveRisk?"risk":"good") + '"><span>Wave 容量异常</span><strong>' + waveRisk + '</strong><small>预算 / 并行</small></div><div><span>正式扩区</span><strong>' + (portfolioActiveTargetId() ? "1" : "0") + '</strong><small>' + (state.scaleExecutionPlan ? esc(state.scaleExecutionPlan.target) : "尚未启动") + '</small></div></section>' +
       '<section class="tower-grid"><div class="tower-section"><div class="tower-section-head"><div><span>EXCEPTION CENTER</span><h2>异常与自动升级</h2><p>只显示当前真实状态触发的异常. 原因消失后, 异常会自动从列表退出.</p></div></div><div class="tower-alert-list">' + (alertCards || '<div class="tower-empty-good"><strong>当前没有开放异常</strong><span>Wave、资源、Gate 和 Evidence 均在可控范围.</span></div>') + '</div></div><div class="tower-section"><div class="tower-section-head"><div><span>DEPENDENCY MAP</span><h2>Rollout 依赖链</h2><p>前一层未通过时, 后一层即使页面上可操作, 也不应被当成正式经营进度.</p></div></div><div class="tower-dependency-list">' + dependencyRows + '</div></div></section>' +
       renderRolloutWhatIf() +
