@@ -734,13 +734,13 @@
       var permissions = (r.permissions || []).map(function (p) { return '<span class="profile-tag">' + esc(p) + '</span>'; }).join("");
       return '<div class="role-permission-card"><div class="flex-between"><strong>' + esc(r.role) + '</strong><span class="soft-chip">' + (r.permissions || []).length + ' 权限</span></div><div class="profile-tags">' + permissions + '</div></div>';
     }).join("");
-    if (!roles) roles = '<div class="empty-state"><strong>RBAC 数据等待服务端</strong><span>启动 npm start 后自动读取.</span></div>';
+    if (!roles) roles = '<div class="empty-state"><strong>RBAC 演示数据加载中</strong><span>当前全部数据由前端原型模拟.</span></div>';
 
     var auditRows = (state.audit || []).slice(0, 10).map(function (a) {
       var at = a.at ? new Date(a.at).toLocaleString("zh-CN", { hour12: false }) : "-";
       return '<tr><td>' + esc(at) + '</td><td><b>' + esc(a.actor) + '</b></td><td>' + esc(a.event) + '</td><td>' + esc(a.object) + '</td><td>' + esc(a.detail) + '</td></tr>';
     }).join("");
-    if (!auditRows) auditRows = '<tr><td colspan="5" class="muted">暂无服务端审计事件. 执行登录、NBA 生成、行动完成或 CRM 同步后会自动记录.</td></tr>';
+    if (!auditRows) auditRows = '<tr><td colspan="5" class="muted">暂无原型审计事件. 执行登录、NBA 生成、行动完成或 CRM 同步演示后会自动记录.</td></tr>';
 
     var mode = "Frontend Prototype";
     return '<div class="page-banner"><div><span class="banner-kicker">ORGANIZATION & ACCESS</span><h2>组织、辖区、角色与审计</h2><p>把 Agent 的“聪明”放进企业边界里. 用户只能访问自己职责范围内的医院、医生、行动和管理视图, 所有关键操作留下审计轨迹.</p></div><div class="banner-side"><strong>' + mode + '</strong><span>当前运行模式</span></div></div>' +
