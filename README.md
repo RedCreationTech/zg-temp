@@ -623,7 +623,157 @@ AI 四轮模拟结果
 
 因此完成陪练后，团队能力画像和辅导优先级会随前端状态变化。
 
-### 6. Visit Coaching Agent
+### 6. 周度经理 Review
+
+地区经理新增独立的周度 Review 工作台。
+
+目标不是再做一张周报，而是把前面所有 Agent 的状态收敛到一条经营链：
+
+```text
+医院目标
+→
+代表 Action
+→
+Coaching
+→
+Outcome
+→
+Champion Pattern
+→
+下周计划
+```
+
+页面顶部直接显示本周经营链完成度，并且每个节点可以钻回对应页面。
+
+#### 医院目标与 Action Review
+
+三家医院在一张表中查看：
+
+- 本季度目标
+- 当前 Action 进度
+- 已完成 / 执行中数量
+- 当前状态
+- 本周真实 Outcome / 风险
+- 一键返回 Hospital Agent
+
+因此周会检查口径从：
+
+```text
+拜访了多少次
+```
+
+转成：
+
+```text
+关键业务杠杆有没有推进
+```
+
+#### 本周核心 Coaching
+
+直接读取团队辅导的 30 分钟 Agenda：
+
+```text
+2 人 × 15 分钟
+```
+
+展示：
+
+- 本周辅导对象
+- Top 1 行为问题
+- 当前拜访分
+- 辅导优先级
+- 是否完成本周辅导
+- 一键进入单次 Coaching
+
+#### Outcome Review
+
+周会会自动汇总前端已经产生的真实信号：
+
+- 拜访中形成的客户承诺
+- 客户现场原话
+- Action Outcome
+- 医院业务里程碑
+- 仍未解决的行为风险
+
+重点不是“任务是否勾选完成”，而是：
+
+```text
+客户行为有没有变化
+业务里程碑有没有变化
+```
+
+#### Champion Pattern
+
+系统自动展示当前最值得复制的团队打法。
+
+经理可以直接：
+
+```text
+采纳为团队 Playbook
+```
+
+采纳后继续回流 Learning Engine。
+
+#### 下周行动计划
+
+点击：
+
+```text
+生成下周计划
+```
+
+系统根据当前前端状态生成建议，例如：
+
+- 锁定周敏 MDT 病例讨论
+- 完成高优先代表 Top 1 行为辅导
+- 锁定滨江病例会日期与名单
+- 海川继续只买信息，不扩大活动预算
+- 验证本周 Champion Pattern
+
+经理可以逐条：
+
+```text
+✓ 采纳
+□ 不采纳
+```
+
+并从计划项直接钻回 Hospital / Doctor / Team Coaching / Learning。
+
+至少确认 3 项后，可以点击：
+
+```text
+完成本周 Review
+```
+
+把下周重点锁定。
+
+因此地区经理现在可以完整演示：
+
+```text
+周一
+看医院与今日行动
+
+↓
+
+周中
+团队辅导 + 单次 Coaching
+
+↓
+
+周五
+Weekly Review
+医院目标
+→ Action
+→ Coaching
+→ Outcome
+→ Champion
+
+↓
+
+生成并确认下周重点
+```
+
+### 7. Visit Coaching Agent
 
 围绕一次真实拜访复盘展示：
 
@@ -751,7 +901,7 @@ Pilot Operations 的核心指标已经改为随当前前端状态动态计算，
 → 是否扩展
 ```
 
-### 7. Director Decision Cockpit
+### 8. Director Decision Cockpit
 
 围绕管理层的五个问题：
 
@@ -774,7 +924,7 @@ Pilot Operations 的核心指标已经改为随当前前端状态动态计算，
 - 决策反向联动 Hospital / Doctor / Coaching
 - Action → Outcome
 
-### 8. Pilot Operations
+### 9. Pilot Operations
 
 模拟 8 周付费 Pilot：
 
@@ -798,7 +948,7 @@ W8 价值评估
 - Product Proof
 - Scale Readiness
 
-### 9. Learning Engine
+### 10. Learning Engine
 
 用于演示：
 
@@ -823,7 +973,7 @@ Context
 
 全部为前端模拟。
 
-### 10. Enterprise Guardrails
+### 11. Enterprise Guardrails
 
 展示企业级要求：
 
@@ -837,7 +987,7 @@ Context
 - 审计
 - SaaS / 私有化 / 混合部署概念
 
-### 11. Organization & Access
+### 12. Organization & Access
 
 展示：
 
