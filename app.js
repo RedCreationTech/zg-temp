@@ -11,6 +11,7 @@
     hospital: "医院作战",
     doctor: "医生导航",
     teamcoaching: "团队辅导",
+    managerreview: "周度 Review",
     coaching: "拜访辅导",
     cockpit: "总监驾驶舱",
     pilot: "Pilot 运营",
@@ -60,9 +61,10 @@
     { role: "地区经理", route: "hospital", kicker: "02 / HOSPITAL", title: "找到医院最值得打的业务杠杆", desc: "从机会价值和可改变程度出发, 避免平均投入, 形成 WHO / WHEN / WHAT / SUCCESS." },
     { role: "医药代表", route: "rep", kicker: "03 / REPRESENTATIVE", title: "代表今天怎么真正使用 AI GPS", desc: "从今天拜访谁开始, 完成准备、证据调用、异议应对和下一步承诺." },
     { role: "地区经理", route: "teamcoaching", kicker: "04 / TEAM COACHING", title: "经理先看团队, 再决定今天辅导谁", desc: "从团队失效模式、拜访质量和陪练完成度中筛出最值得立即辅导的代表." },
-    { role: "销售总监", route: "cockpit", kicker: "05 / MANAGEMENT", title: "管理层只处理真正需要介入的动作", desc: "加资源、纠偏、升级或停止, 而不是月底再看一张结果报表." },
-    { role: "销售总监", route: "learning", kicker: "06 / LEARNING", title: "让真实 Outcome 回流为组织判断能力", desc: "有效和无效动作形成 RuleValidation, 高风险规则仍保留 Human Review." },
-    { role: "销售总监", route: "pilot", kicker: "07 / PILOT", title: "最后用 8 周 Pilot 验证产品价值", desc: "验证客户愿意用、行动真的发生、结果能回流, 再决定扩展到更多 Agent 和区域." }
+    { role: "地区经理", route: "managerreview", kicker: "05 / WEEKLY REVIEW", title: "把本周所有行动收敛成一次经理 Review", desc: "医院目标、代表 Action、Coaching、Outcome 和下周计划在一页闭环." },
+    { role: "销售总监", route: "cockpit", kicker: "06 / MANAGEMENT", title: "管理层只处理真正需要介入的动作", desc: "加资源、纠偏、升级或停止, 而不是月底再看一张结果报表." },
+    { role: "销售总监", route: "learning", kicker: "07 / LEARNING", title: "让真实 Outcome 回流为组织判断能力", desc: "有效和无效动作形成 RuleValidation, 高风险规则仍保留 Human Review." },
+    { role: "销售总监", route: "pilot", kicker: "08 / PILOT", title: "最后用 8 周 Pilot 验证产品价值", desc: "验证客户愿意用、行动真的发生、结果能回流, 再决定扩展到更多 Agent 和区域." }
   ];
 
   var saved = {};
@@ -90,6 +92,9 @@
     coachingAgendaStatus: saved.coachingAgendaStatus || {},
     coachingAgendaSelection: saved.coachingAgendaSelection || [],
     teamPlaybook: saved.teamPlaybook || null,
+    managerReviewPlan: saved.managerReviewPlan || {},
+    managerReviewGenerated: saved.managerReviewGenerated || false,
+    managerReviewClosed: saved.managerReviewClosed || false,
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -135,6 +140,9 @@
       coachingAgendaStatus: state.coachingAgendaStatus,
       coachingAgendaSelection: state.coachingAgendaSelection,
       teamPlaybook: state.teamPlaybook,
+      managerReviewPlan: state.managerReviewPlan,
+      managerReviewGenerated: state.managerReviewGenerated,
+      managerReviewClosed: state.managerReviewClosed,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
