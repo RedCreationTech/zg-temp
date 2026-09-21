@@ -164,6 +164,26 @@
     });
   }
 
+  function resetManagementEffects(riskId) {
+    if (riskId === "m1") {
+      state.actionStatus.a1 = "todo";
+      state.actionStatus.a2 = "doing";
+      state.actionStatus.a3 = "todo";
+      delete state.resourceOverrides["h1:r-h1-1"];
+    }
+    if (riskId === "m2") {
+      state.actionStatus.a7 = "todo";
+    }
+    if (riskId === "m3") {
+      state.actionStatus.a5 = "todo";
+      delete state.resourceOverrides["h3:r-h3-3"];
+    }
+    if (riskId === "m4") {
+      state.actionStatus.a4 = "doing";
+      delete state.resourceOverrides["h2:r-h2-1"];
+    }
+  }
+
   function applyManagementEffects(risk, decision) {
     if (!risk) return;
 
@@ -198,6 +218,7 @@
     var risk = (data.risks || []).find(function (r) { return r.id === riskId; });
     if (!risk || !MANAGEMENT_ACTIONS[decision]) return;
 
+    resetManagementEffects(riskId);
     state.managementDecisions[riskId] = decision;
     applyManagementEffects(risk, decision);
     state.managementHistory.unshift({
@@ -220,24 +241,7 @@
     if (!state.managementDecisions[riskId]) return;
     delete state.managementDecisions[riskId];
 
-    if (riskId === "m1") {
-      state.actionStatus.a1 = "todo";
-      state.actionStatus.a2 = "doing";
-      state.actionStatus.a3 = "todo";
-      delete state.resourceOverrides["h1:r-h1-1"];
-    }
-    if (riskId === "m2") {
-      state.actionStatus.a7 = "todo";
-    }
-    if (riskId === "m3") {
-      state.actionStatus.a5 = "todo";
-      delete state.resourceOverrides["h3:r-h3-3"];
-    }
-    if (riskId === "m4") {
-      state.actionStatus.a4 = "doing";
-      delete state.resourceOverrides["h2:r-h2-1"];
-    }
-
+    resetManagementEffects(riskId);
     saveState();
     showToast("已撤销该管理决策及其演示联动");
     render();
