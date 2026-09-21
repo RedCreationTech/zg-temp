@@ -38,7 +38,11 @@
     org: null,
     audit: [],
     crmSync: null,
-    runtimeOnline: null
+    runtimeOnline: null,
+    domainSummary: null,
+    recentDecisions: [],
+    recentNBAs: [],
+    outcomes: []
   };
 
   var $ = function (selector, root) { return (root || document).querySelector(selector); };
@@ -461,25 +465,113 @@
 
   function startAIGeneration(type) {
     var titleMap = { hospital: "医院作战 AI 生成", doctor: "医生下一步 AI 生成", coaching: "拜访辅导 AI 生成", cockpit: "管理决策 AI 生成" };
+    var targetId = type === "hospital" ? state.selectedHospital :
+      (type === "doctor" ? state.selectedDoctor :
+      (type === "coaching" ? state.selectedVisit : "national"));
+    var context = {
+      route: state.route,
+      role: state.role,
+      actor: state.session && state.session.name,
+      targetId: targetId,
+      hospitalId: state.selectedHospital,
+      doctorId: state.selectedDoctor,
+      visitId: state.selectedVisit
+    };
     var body =
-      '<div class="ai-stream"><div class="ai-stream-head"><strong>Decision Engine 正在生成</strong><span class="stream-status"><i class="stream-dot"></i>Streaming</span></div><p id="streamText"></p><div class="ai-stream-actions"><button class="btn primary" id="adoptGenerated" disabled>采纳为下一步行动</button></div></div>' +
-      '<div class="drawer-section mt-16"><h4>生成依据</h4><p class="small-note">企业数据、当前角色、医院/医生 Context、历史动作、医学知识与 Decision Rules. 当前版本通过 Mock API 模拟, 接真实服务时页面调用接口保持不变.</p></div>';
+      '<div class="ai-stream"><div class="ai-stream-head"><strong>Decision Engine 正在生成</strong><span class="stream-status"><i class="stream-dot"></i>Streaming</span></div><p id="streamText"></p><div class="ai-stream-actions"><button class="btn ghost" id="recordGeneratedOutcome" style="display:none">记录 Outcome</button><button class="btn primary" id="adoptGenerated" disabled>采纳为下一步行动</button></div></div>' +
+      '<div id="decisionTraceSlot"></div>' +
+      '<div class="drawer-section mt-16"><h4>生成依据</h4><p class="small-note">Context Builder → Decision Rules → Decision → NBA. Pilot Server 模式会保存完整 Decision Trace, Browser Mock 模式自动回退.</p></div>';
     openDrawer(titleMap[type] || "AI 生成", body, null);
     var target = $("#streamText");
     var adopt = $("#adoptGenerated");
-    window.ZG_API.generateNBA(type, { route: state.route, role: state.role }, function (token, done) {
+
+    window.ZG_API.generateNBA(type, context, function (token, done) {
       if (target) target.textContent += token;
       if (done && adopt) {
         adopt.disabled = false;
         var status = $(".stream-status");
         if (status) status.innerHTML = "✓ 生成完成";
       }
-    }).then(function () {
+    }).then(function (result) {
+      if (!result) return;
+
+      if (result.decision && result.nba) {
+        state.recentDecisions.unshift(result.decision);
+        state.recentNBAs.unshift(result.nba);
+        state.recentDecisions = state.recentDecisions.slice(0, 20);
+        state.recentNBAs = state.recentNBAs.slice(0, 20);
+
+        var rules = (result.rules || []).map(function (r) {
+          return '<span class="profile-tag">' + esc(r.id) + ' · ' + esc(r.title) + '</span>';
+        }).join("");
+        var trace = $("#decisionTraceSlot");
+        if (trace) {
+          trace.innerHTML =
+            '<div class="drawer-section mt-16"><h4>DECISION TRACE</h4>' +
+            '<div class="drawer-meta"><div class="meta-cell"><b>Context</b><span>' + esc(result.context.targetType) + ':' + esc(result.context.targetId) + '</span></div>' +
+            '<div class="meta-cell"><b>Priority</b><span>' + esc(result.decision.priorityScore) + ' / 100</span></div>' +
+            '<div class="meta-cell"><b>Risk</b><span>' + esc(result.decision.riskLevel) + '</span></div>' +
+            '<div class="meta-cell"><b>Human Review</b><span>' + (result.decision.humanReviewRequired ? 'Required' : 'Not required') + '</span></div></div>' +
+            '<div class="nba-grid mt-12"><div class="nba-item"><b>WHO</b><span>' + esc(result.nba.who) + '</span></div><div class="nba-item"><b>WHEN</b><span>' + esc(result.nba.when) + '</span></div><div class="nba-item"><b>WHAT</b><span>' + esc(result.nba.what) + '</span></div><div class="nba-item"><b>WHY</b><span>' + esc(result.nba.why) + '</span></div><div class="nba-item"><b>SUCCESS</b><span>' + esc(result.nba.success) + '</span></div></div>' +
+            '<div class="profile-tags mt-12">' + rules + '</div></div>';
+        }
+        var outcomeBtn = $("#recordGeneratedOutcome");
+        if (outcomeBtn) {
+          outcomeBtn.style.display = "inline-flex";
+          outcomeBtn.addEventListener("click", function () { openOutcomeRecorder(result.nba); });
+        }
+      }
+
       if (adopt) adopt.addEventListener("click", function () {
-        closeDrawer();
-        showToast("AI 建议已采纳并进入执行队列");
+        showToast("AI 建议已采纳. 执行后请回写 Outcome");
+        if (result.nba) {
+          var outcomeBtn = $("#recordGeneratedOutcome");
+          if (outcomeBtn) outcomeBtn.style.display = "inline-flex";
+        } else {
+          closeDrawer();
+        }
       });
     });
+  }
+
+  function openOutcomeRecorder(nba) {
+    if (!nba || !nba.id) {
+      showToast("当前是 Browser Mock 模式, 无服务端 NBA ID");
+      return;
+    }
+    var body =
+      '<div class="rule-form"><div class="drawer-callout"><strong>' + esc(nba.what) + '</strong><p>Success Signal: ' + esc(nba.success) + '</p></div>' +
+      '<div class="rule-form-grid"><div><label>执行结果</label><select id="outcomeResult"><option>已达成</option><option>部分达成</option><option>未达成</option><option>条件变化</option></select></div><div><label>有效性 0-100</label><input id="outcomeEffectiveness" type="number" min="0" max="100" value="80"></div></div>' +
+      '<div><label>实际业务信号</label><textarea id="outcomeSignal" placeholder="例如: 周主任同意在周三 MDT 讨论 1 例匹配患者"></textarea></div>' +
+      '<div><label>证据 / 反馈</label><textarea id="outcomeEvidence" placeholder="记录医生反馈、会议结果、病例推进或其他可验证证据"></textarea></div>' +
+      '<div class="rule-actions"><button class="btn ghost" id="cancelOutcome">取消</button><button class="btn primary" id="saveOutcome">写入 Outcome</button></div></div>';
+    openDrawer("记录 Action Outcome", body, null);
+    $("#cancelOutcome").addEventListener("click", closeDrawer);
+    $("#saveOutcome").addEventListener("click", async function () {
+      var signal = $("#outcomeSignal").value.trim();
+      if (!signal) { showToast("请填写实际业务信号"); return; }
+      var result = await window.ZG_API.recordOutcome({
+        nbaId: nba.id,
+        result: $("#outcomeResult").value,
+        signal: signal,
+        evidence: $("#outcomeEvidence").value.trim(),
+        effectiveness: Number($("#outcomeEffectiveness").value || 50),
+        actor: state.session && state.session.name
+      });
+      if (result && result.outcome) state.outcomes.unshift(result.outcome);
+      closeDrawer();
+      showToast(result.offline ? "离线模式: Outcome 仅本地模拟" : "Outcome 已回流 Learning Engine");
+      refreshDecisionData();
+    });
+  }
+
+  async function refreshDecisionData() {
+    var trace = await window.ZG_API.getDecisions();
+    state.recentDecisions = trace.decisions || [];
+    state.recentNBAs = trace.nbas || [];
+    var outcomeResult = await window.ZG_API.getOutcomes();
+    state.outcomes = outcomeResult.outcomes || [];
+    if (state.route === "learning") render();
   }
 
   function openRuleEditor() {
@@ -623,6 +715,7 @@
         return true;
       });
       state.crmSync = boot.crmSync || null;
+      state.domainSummary = boot.domainSummary || null;
       saveState();
     }
 
@@ -630,8 +723,9 @@
     if (orgResult && orgResult.organization) state.org = orgResult;
     var auditResult = await window.ZG_API.getAudit();
     if (auditResult) state.audit = auditResult.audit || [];
+    await refreshDecisionData();
 
-    if (state.route === "admin" || state.route === "guardrails" || state.route === "pilot") render();
+    if (state.route === "admin" || state.route === "guardrails" || state.route === "pilot" || state.route === "learning") render();
   }
 
   function renderGuardrails() {
