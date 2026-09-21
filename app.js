@@ -97,6 +97,7 @@
     managerReviewGenerated: saved.managerReviewGenerated || false,
     managerReviewClosed: saved.managerReviewClosed || false,
     weeklyDecisionBrief: saved.weeklyDecisionBrief || null,
+    briefMode: saved.briefMode || "manager",
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -146,6 +147,7 @@
       managerReviewGenerated: state.managerReviewGenerated,
       managerReviewClosed: state.managerReviewClosed,
       weeklyDecisionBrief: state.weeklyDecisionBrief,
+      briefMode: state.briefMode,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -1476,7 +1478,7 @@
     }
   }
 
-  function renderWeeklyDecisionBrief() {
+  function renderManagerBriefView() {
     var b = state.weeklyDecisionBrief;
     if (!b) {
       return '<div class="brief-empty"><div><span>WEEKLY DECISION BRIEF</span><h2>还没有生成周度决策摘要</h2><p>先完成周度 Review, 确认至少 3 个下周行动并关闭本周 Review.</p><button class="btn primary" data-review-route="managerreview">返回周度 Review</button></div></div>';
@@ -1515,7 +1517,7 @@
       : '<div class="brief-muted">本周尚未形成 Champion Pattern.</div>';
 
     return '<div class="brief-page">' +
-      '<div class="brief-toolbar no-print"><button class="btn ghost" data-review-route="managerreview">返回 Review</button><div><button class="btn soft" data-brief-regenerate>按当前状态重新生成</button><button class="btn primary" data-brief-print>打印 / 保存 PDF</button></div></div>' +
+      renderBriefToolbar() +
       '<header class="brief-cover"><div><span>ZG AI GPS · WEEKLY DECISION BRIEF</span><h1>本周变化、判断、结果与下周重点</h1><p>' + esc(b.headline) + '</p></div><div class="brief-meta"><strong>' + esc(b.week) + '</strong><span>' + esc(b.team) + '</span><span>Manager · ' + esc(b.manager) + '</span><small>生成于 ' + esc(briefDateLabel(b.generatedAt)) + '</small></div></header>' +
       '<section class="brief-metrics"><div><span>医院推进</span><strong>' + b.metrics.hospital + '%</strong></div><div><span>Action 执行</span><strong>' + b.metrics.action + '%</strong></div><div><span>Coaching</span><strong>' + b.metrics.coaching + '%</strong></div><div><span>Outcome</span><strong>' + b.metrics.outcome + '%</strong></div><div><span>团队拜访分</span><strong>' + b.metrics.teamScore + '</strong><small>' + (b.metrics.trendDelta >= 0 ? "+" : "") + b.metrics.trendDelta + '</small></div></section>' +
       '<section class="brief-section"><div class="brief-section-title"><span>01</span><div><h2>本周什么变了</h2><p>只保留会改变下周动作的变化.</p></div></div><div class="brief-changes">' + changes + '</div></section>' +
@@ -1527,6 +1529,159 @@
       '<section class="brief-section brief-next"><div class="brief-section-title"><span>07</span><div><h2>下周只做这些</h2><p>已经过经理确认的可验证 Action.</p></div></div><div class="brief-next-list">' + next + '</div></section>' +
       '<footer class="brief-footer"><div><span>DECISION PRINCIPLE</span><strong>少看结果报表, 多确认下一步动作是否真的改变客户行为.</strong></div><div><span>SNAPSHOT ID</span><strong>' + esc(b.id) + '</strong></div></footer>' +
     '</div>';
+  }
+
+  function renderBriefModeSwitch() {
+    var modes = [
+      ["manager","经理版"],
+      ["director","总监版"],
+      ["executive","Executive"]
+    ];
+    return '<div class="brief-mode-switch">' + modes.map(function(m){
+      return '<button class="' + (state.briefMode === m[0] ? "active" : "") + '" data-brief-mode="' + m[0] + '">' + m[1] + '</button>';
+    }).join("") + '</div>';
+  }
+
+  function renderBriefToolbar() {
+    return '<div class="brief-toolbar no-print"><div class="brief-toolbar-left"><button class="btn ghost" data-review-route="managerreview">返回 Review</button>' + renderBriefModeSwitch() + '</div><div><button class="btn soft" data-brief-regenerate>按当前状态重新生成</button><button class="btn primary" data-brief-print>打印 / 保存 PDF</button></div></div>';
+  }
+
+  function healthLevel(score) {
+    if (score >= 75) return { label:"绿", cls:"green", text:"健康" };
+    if (score >= 55) return { label:"黄", cls:"yellow", text:"关注" };
+    return { label:"红", cls:"red", text:"需介入" };
+  }
+
+  function calculateBusinessHealth(b) {
+    var m = b.metrics || {};
+    var momentum = Math.round(Number(m.hospital || 0) * .55 + Number(m.outcome || 0) * .45);
+    var execution = Math.round(Number(m.action || 0) * .55 + Number(m.coaching || 0) * .45);
+    var learning = Math.round(Number(m.learning || 0) * .7 + (b.champion && b.champion.adopted ? 30 : 15));
+    return {
+      momentum:{ score:Math.min(100,momentum), meta:healthLevel(momentum), why:"医院关键杠杆推进 + 客户 Outcome" },
+      execution:{ score:Math.min(100,execution), meta:healthLevel(execution), why:"Action 执行 + Coaching 闭环" },
+      learning:{ score:Math.min(100,learning), meta:healthLevel(learning), why:"Champion Pattern + Team Playbook" }
+    };
+  }
+
+  function calculateTerritoryComparison(b) {
+    return (b.hospitals || []).map(function(h){
+      var outcomeMatch = (b.outcomes || []).some(function(o){
+        return String(o.title || "").indexOf(h.name.replace("华东附一","周敏")) >= 0 ||
+          String(o.title || "").indexOf(h.name) >= 0;
+      });
+      var outcome = outcomeMatch ? Math.min(92, h.progress + 12) : Math.max(15, Math.round(h.progress * .68));
+      var risk = h.progress >= 75 && outcome >= 60 ? "low" : (h.progress >= 50 ? "medium" : "high");
+      return { name:h.name, action:h.progress, outcome:outcome, risk:risk, status:h.status };
+    });
+  }
+
+  function directorAttentionItems(b) {
+    var items = [];
+    (b.risks || []).slice(0,3).forEach(function(r){
+      items.push({
+        object:r.object,
+        question:"是否需要管理层介入 “" + r.issue + "” ?",
+        current:r.why,
+        recommendation:r.next,
+        severity:r.level === "高" ? "high" : "medium"
+      });
+    });
+    if (b.champion) {
+      items.push({
+        object:b.champion.name,
+        question:"是否把该 Champion Pattern 扩展到更多同类场景?",
+        current:"承诺率 " + b.champion.commitmentRate + "% · NBA 完成 " + b.champion.nbaCompletion + "%",
+        recommendation:b.champion.adopted ? "继续在 2–3 个同类场景验证 Outcome" : "先进入 Team Playbook 再扩大验证",
+        severity:"opportunity"
+      });
+    }
+    return items.slice(0,4);
+  }
+
+  function executiveSummaryItems(b) {
+    var health = calculateBusinessHealth(b);
+    var items = [];
+    var strongest = [health.momentum,health.execution,health.learning].sort(function(a,b2){return b2.score-a.score;})[0];
+    var weakest = [health.momentum,health.execution,health.learning].sort(function(a,b2){return a.score-b2.score;})[0];
+
+    if (b.changes && b.changes[0]) items.push(b.changes[0]);
+    items.push("当前区域最强环节为 “" + strongest.why + "”, 健康度 " + strongest.score + "%.");
+    items.push("当前最需要管理关注的是 “" + weakest.why + "”, 健康度 " + weakest.score + "%.");
+    if (b.champion) {
+      items.push(b.champion.name + " 的 Champion Pattern 已形成, " + (b.champion.adopted ? "已进入 Team Playbook 候选验证." : "建议先完成团队 Playbook 验证."));
+    }
+    if (b.next && b.next.length) {
+      items.push("下周只保留 " + b.next.length + " 个可验证动作, 首要动作是 “" + b.next[0].title + "”.");
+    }
+    return items.slice(0,5);
+  }
+
+  function renderHealthCards(health) {
+    var defs = [
+      ["Business Momentum",health.momentum],
+      ["Execution Quality",health.execution],
+      ["Organization Learning",health.learning]
+    ];
+    return '<div class="executive-health-grid">' + defs.map(function(item){
+      return '<div class="health-card ' + item[1].meta.cls + '"><div class="health-top"><span class="health-light"></span><b>' + item[1].meta.text + '</b></div><span>' + esc(item[0]) + '</span><strong>' + item[1].score + '%</strong><p>' + esc(item[1].why) + '</p></div>';
+    }).join("") + '</div>';
+  }
+
+  function renderDirectorBriefView() {
+    var b = state.weeklyDecisionBrief;
+    if (!b) return renderManagerBriefView();
+    var health = calculateBusinessHealth(b);
+    var territories = calculateTerritoryComparison(b);
+    var attention = directorAttentionItems(b);
+    var summary = executiveSummaryItems(b);
+
+    var territoryRows = territories.map(function(t){
+      var riskLabel = {low:"低",medium:"中",high:"高"}[t.risk] || t.risk;
+      return '<tr><td><b>' + esc(t.name) + '</b><span>' + esc(t.status) + '</span></td><td><div class="director-progress"><div class="bar"><i style="width:' + t.action + '%"></i></div><b>' + t.action + '%</b></div></td><td><div class="director-progress"><div class="bar"><i style="width:' + t.outcome + '%"></i></div><b>' + t.outcome + '%</b></div></td><td><span class="territory-risk ' + t.risk + '">' + riskLabel + '</span></td></tr>';
+    }).join("");
+
+    var attentionCards = attention.map(function(a){
+      return '<article class="attention-card ' + a.severity + '"><div class="attention-head"><span>' + esc(a.object) + '</span><b>' + (a.severity === "high" ? "需决策" : (a.severity === "opportunity" ? "机会" : "关注")) + '</b></div><h3>' + esc(a.question) + '</h3><div class="attention-current"><span>当前</span><p>' + esc(a.current) + '</p></div><div class="attention-rec"><span>建议</span><p>' + esc(a.recommendation) + '</p></div></article>';
+    }).join("");
+
+    var summaryCards = summary.map(function(s,i){
+      return '<div class="director-summary-item"><span>0' + (i+1) + '</span><p>' + esc(s) + '</p></div>';
+    }).join("");
+
+    return '<div class="brief-page director-brief">' +
+      renderBriefToolbar() +
+      '<header class="brief-cover director-cover"><div><span>ZG AI GPS · DIRECTOR WEEKLY BRIEF</span><h1>区域经营判断与管理介入</h1><p>总监不需要看到每一条拜访细节, 只需要知道哪里正在推进、哪里需要介入、资源该不该调整.</p></div><div class="brief-meta"><strong>' + esc(b.week) + '</strong><span>' + esc(b.team) + '</span><span>Director View</span><small>Snapshot · ' + esc(briefDateLabel(b.generatedAt)) + '</small></div></header>' +
+      '<section class="brief-section"><div class="brief-section-title"><span>01</span><div><h2>区域健康度</h2><p>红黄绿来自同一份 Weekly Snapshot.</p></div></div>' + renderHealthCards(health) + '</section>' +
+      '<section class="brief-two-col"><div class="brief-section"><div class="brief-section-title"><span>02</span><div><h2>Executive Summary</h2><p>只保留会改变管理动作的结论.</p></div></div><div class="director-summary-list">' + summaryCards + '</div></div>' +
+      '<div class="brief-section"><div class="brief-section-title"><span>03</span><div><h2>Management Attention</h2><p>不是风险列表, 而是需要管理判断的问题.</p></div></div><div class="attention-list">' + attentionCards + '</div></div></section>' +
+      '<section class="brief-section"><div class="brief-section-title"><span>04</span><div><h2>Territory Comparison</h2><p>横向比较 Action、Outcome 与风险, 避免只看单个医院.</p></div></div><div class="director-table-wrap"><table class="director-table"><thead><tr><th>区域 / 医院</th><th>Action</th><th>Outcome</th><th>风险</th></tr></thead><tbody>' + territoryRows + '</tbody></table></div></section>' +
+      '<section class="brief-section brief-next"><div class="brief-section-title"><span>05</span><div><h2>下周管理层只盯这些</h2><p>来自经理已确认的下周 Action.</p></div></div><div class="brief-next-list">' + (b.next || []).map(function(item,i){return '<div class="brief-next-item"><span>' + (i+1) + '</span><div><strong>' + esc(item.title) + '</strong><p>' + esc(item.why) + '</p><small>Owner · ' + esc(item.owner) + ' · Success · ' + esc(item.success) + '</small></div></div>';}).join("") + '</div></section>' +
+      '<footer class="brief-footer"><div><span>DIRECTOR PRINCIPLE</span><strong>管理层只介入高价值、跨资源或无法由一线自行解决的动作.</strong></div><div><span>SNAPSHOT ID</span><strong>' + esc(b.id) + '</strong></div></footer></div>';
+  }
+
+  function renderExecutiveBriefView() {
+    var b = state.weeklyDecisionBrief;
+    if (!b) return renderManagerBriefView();
+    var health = calculateBusinessHealth(b);
+    var summary = executiveSummaryItems(b);
+    var attention = directorAttentionItems(b).slice(0,3);
+
+    return '<div class="brief-page executive-brief">' +
+      renderBriefToolbar() +
+      '<header class="executive-cover"><div><span>ZG AI GPS · WEEKLY EXECUTIVE BRIEF</span><h1>本周一句话结论</h1><p>' + esc(b.headline) + '</p></div><div><strong>' + esc(b.week) + '</strong><span>' + esc(b.team) + '</span></div></header>' +
+      renderHealthCards(health) +
+      '<section class="executive-summary-panel"><div class="executive-summary-title"><span>EXECUTIVE SUMMARY</span><h2>5 条信息看完整个区域</h2></div><div class="executive-summary-items">' + summary.map(function(s,i){return '<div><span>' + (i+1) + '</span><p>' + esc(s) + '</p></div>';}).join("") + '</div></section>' +
+      '<section class="executive-grid"><div class="executive-card"><span>MANAGEMENT ATTENTION</span><h3>需要继续关注</h3><div class="executive-attention">' + attention.map(function(a){return '<div><b>' + esc(a.object) + '</b><p>' + esc(a.question) + '</p><small>' + esc(a.recommendation) + '</small></div>';}).join("") + '</div></div>' +
+      '<div class="executive-card"><span>CHAMPION PATTERN</span><h3>值得复制</h3>' + (b.champion ? '<div class="executive-champion"><strong>' + esc(b.champion.name) + '</strong><p>' + esc(b.champion.strength) + '</p><small>承诺率 ' + esc(b.champion.commitmentRate) + '% · NBA ' + esc(b.champion.nbaCompletion) + '%</small></div>' : '<div class="brief-muted">暂无可复制打法</div>') + '</div></section>' +
+      '<section class="executive-next"><div><span>NEXT WEEK</span><h2>下周只做 ' + (b.next || []).length + ' 件事</h2></div><div class="executive-next-grid">' + (b.next || []).map(function(item,i){return '<div><span>0' + (i+1) + '</span><strong>' + esc(item.title) + '</strong><p>' + esc(item.owner) + ' · ' + esc(item.success) + '</p></div>';}).join("") + '</div></section>' +
+      '<footer class="brief-footer"><div><span>EXECUTIVE PRINCIPLE</span><strong>少看更多数据, 只确认最重要的变化、判断和下一步.</strong></div><div><span>SNAPSHOT ID</span><strong>' + esc(b.id) + '</strong></div></footer></div>';
+  }
+
+  function renderWeeklyDecisionBrief() {
+    if (state.briefMode === "director") return renderDirectorBriefView();
+    if (state.briefMode === "executive") return renderExecutiveBriefView();
+    return renderManagerBriefView();
   }
 
   function renderManagerReview() {
@@ -3068,7 +3223,16 @@
       });
     });
 
-    $$("[data-brief-regenerate]").forEach(function (el) {
+    $("[data-brief-mode]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.briefMode = el.getAttribute("data-brief-mode") || "manager";
+        saveState();
+        render();
+        window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $("[data-brief-regenerate]").forEach(function (el) {
       el.addEventListener("click", regenerateWeeklyDecisionBrief);
     });
 
