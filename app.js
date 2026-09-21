@@ -3107,8 +3107,8 @@
       progress:progress.pct,
       risks:risks.length
     };
-    if (gateId === "g30" && status !== "hold") state.scaleExecutionPhase = "d60";
-    if (gateId === "g60" && status !== "hold") state.scaleExecutionPhase = "d90";
+    if (gateId === "g30") state.scaleExecutionPhase = status === "hold" ? "d30" : "d60";
+    if (gateId === "g60") state.scaleExecutionPhase = status === "hold" ? "d60" : "d90";
     saveState();
     render();
     showToast(gateReviewMeta(status).label + " · " + gateId.toUpperCase());
@@ -3335,6 +3335,10 @@
   }
 
   function advanceSecondWaveRamp(type,id) {
+    if (!secondWaveUnlocked()) {
+      showToast("Day 30 Gate 当前未开放第二批爬坡");
+      return;
+    }
     if (!secondWaveObjectStarted(type,id)) {
       showToast("请先启动该第二批对象");
       return;
