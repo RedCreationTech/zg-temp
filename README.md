@@ -23,6 +23,45 @@ Context → Decision → NBA → Action → Outcome → Rule Update
 - 1 个 Learning Engine：Decision Rules / Outcome Learning
 - 1 个 Pilot Operations：8 周验证与扩展运营
 
+
+## 推荐运行方式
+
+当前版本推荐直接启动 Pilot Runtime：
+
+```bash
+npm start
+```
+
+然后访问：
+
+```text
+http://localhost:8080
+```
+
+这种方式会启用：
+
+- REST API
+- 服务端 Action 状态持久化
+- Session 记录
+- Decision Rule 持久化
+- CRM / SFE 同步状态
+- 组织与权限数据
+- 审计日志
+- 前端自动识别 Pilot Server 模式
+
+运行时数据写入：
+
+```text
+.runtime/runtime.json
+```
+
+直接打开 `index.html` 仍然可用，此时系统自动进入 Browser Mock 模式。
+
+## 架构与接口文档
+
+- `docs/C4-ARCHITECTURE.md`：C1 / C2 / C3 架构与目标生产架构
+- `docs/API.md`：Pilot REST API 契约、前端回退策略与后续真实服务边界
+
 ## 当前 MVP 功能
 
 ### 1. 登录与角色工作台
@@ -139,7 +178,16 @@ Context → Decision → NBA → Action → Outcome → Rule Update
 - Scale Readiness
 - AI Pilot 决策简报
 
-### 9. Enterprise Guardrails
+### 9. Organization & Access
+
+- Organization / Region / Territory 基础模型
+- 用户与角色
+- RBAC 权限展示
+- 数据范围
+- 服务端运行模式识别
+- 登录 / NBA / Action / Rule / CRM 同步审计
+
+### 10. Enterprise Guardrails
 
 - 内容防火墙
 - 行为防火墙
