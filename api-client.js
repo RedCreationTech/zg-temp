@@ -141,6 +141,53 @@ window.ZG_API = (function (fallback) {
   }
 
 
+  async function acceptNBA(nbaId, payload) {
+    try {
+      return await request("/api/nbas/" + encodeURIComponent(nbaId) + "/accept", {
+        method: "POST",
+        body: JSON.stringify(payload || {})
+      }, 2200);
+    } catch (error) {
+      return {
+        ok: true,
+        offline: true,
+        action: {
+          id: "offline-action-" + Date.now(),
+          nbaId: nbaId,
+          status: "todo",
+          title: payload && payload.title ? payload.title : "离线 NBA Action"
+        }
+      };
+    }
+  }
+
+  async function getActions() {
+    try {
+      return await request("/api/domain/actions", { method: "GET" }, 1600);
+    } catch (error) {
+      return { ok: true, offline: true, actions: [] };
+    }
+  }
+
+  async function getRuleValidations() {
+    try {
+      return await request("/api/domain/rule-validations", { method: "GET" }, 1600);
+    } catch (error) {
+      return { ok: true, offline: true, ruleValidations: [] };
+    }
+  }
+
+  async function reviewRuleValidation(validationId, action, actor) {
+    try {
+      return await request("/api/domain/rule-validations/" + encodeURIComponent(validationId) + "/review", {
+        method: "POST",
+        body: JSON.stringify({ action: action, actor: actor })
+      }, 2200);
+    } catch (error) {
+      return { ok: true, offline: true, validation: { id: validationId, status: action === "approve" ? "approved" : "rejected" } };
+    }
+  }
+
   async function recordOutcome(payload) {
     try {
       return await request("/api/domain/outcomes", {
@@ -193,6 +240,10 @@ window.ZG_API = (function (fallback) {
     transcribeVisit: transcribeVisit,
     saveRule: saveRule,
     syncCRM: syncCRM,
+    acceptNBA: acceptNBA,
+    getActions: getActions,
+    getRuleValidations: getRuleValidations,
+    reviewRuleValidation: reviewRuleValidation,
     recordOutcome: recordOutcome,
     getDecisions: getDecisions,
     getOutcomes: getOutcomes,
