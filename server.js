@@ -10,10 +10,16 @@ const {
   getVisit,
   listDoctors,
   listVisits,
+  createAction,
   createOutcome,
   createRule
 } = require("./lib/domain-model");
 const { runDecision } = require("./lib/decision-engine");
+const {
+  buildRuleValidation,
+  applySafeValidation,
+  reviewValidation
+} = require("./lib/learning-engine");
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -221,7 +227,7 @@ async function handleApi(req, res, url) {
     return json(res, 200, {
       ok: true,
       service: "ZG AI GPS Pilot Runtime",
-      version: "0.4.0",
+      version: "0.5.0",
       now: new Date().toISOString()
     });
   }
@@ -239,7 +245,9 @@ async function handleApi(req, res, url) {
         rules: state.domain.rules.length,
         decisions: state.domain.decisions.length,
         nbas: state.domain.nbas.length,
-        outcomes: state.domain.outcomes.length
+        outcomes: state.domain.outcomes.length,
+        actions: state.domain.actions.length,
+        ruleValidations: state.domain.ruleValidations.length
       },
       session: state.sessions && state.sessions[0] ? state.sessions[0] : null
     });
@@ -313,6 +321,28 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (method === "GET" && pathname === "/api/domain/actions") {
+    return json(res, 200, { ok: true, actions: state.domain.actions.slice().reverse() });
+  }
+
+  if (method === "GET" && pathname === "/api/domain/rule-validations") {
+    return json(res, 200, { ok: true, ruleValidations: state.domain.ruleValidations.slice().reverse() });
+  }
+
+  const validationReviewMatch = pathname.match(/^\/api\/domain\/rule-validations\/([^/]+)\/review$/);
+  if (method === "POST" && validationReviewMatch) {
+    const body = await readBody(req);
+    const validationId = decodeURIComponent(validationReviewMatch[1]);
+    try {
+      const reviewed = reviewValidation(state.domain, validationId, body.action, body.actor);
+      audit(state, "rule.validation.review", body.actor, validationId, "action=" + body.action + "; rule=" + reviewed.rule.id);
+      writeState(state);
+      return json(res, 200, { ok: true, ...reviewed });
+    } catch (error) {
+      return json(res, 400, { ok: false, error: error.message });
+    }
+  }
+
   if (method === "GET" && pathname === "/api/domain/outcomes") {
     return json(res, 200, { ok: true, outcomes: state.domain.outcomes.slice().reverse() });
   }
@@ -338,9 +368,35 @@ async function handleApi(req, res, url) {
 
     state.domain.outcomes.push(outcome);
     nba.status = "measured";
-    audit(state, "outcome.record", body.actor, outcome.id, "nba=" + nba.id + "; effectiveness=" + outcome.effectiveness);
+
+    const action = body.actionId
+      ? state.domain.actions.find(item => item.id === body.actionId)
+      : state.domain.actions.find(item => item.nbaId === nba.id);
+    if (action) {
+      outcome.actionId = action.id;
+      if (action.status !== "done") {
+        action.status = "done";
+        action.completedAt = new Date().toISOString();
+        action.updatedAt = new Date().toISOString();
+        state.actionStatus[action.id] = "done";
+      }
+    }
+
+    const validations = buildRuleValidation(state.domain, outcome);
+    for (const validation of validations) {
+      state.domain.ruleValidations.push(validation);
+      applySafeValidation(state.domain, validation);
+    }
+
+    audit(
+      state,
+      "outcome.record",
+      body.actor,
+      outcome.id,
+      "nba=" + nba.id + "; effectiveness=" + outcome.effectiveness + "; ruleValidations=" + validations.length
+    );
     writeState(state);
-    return json(res, 201, { ok: true, outcome });
+    return json(res, 201, { ok: true, outcome, action: action || null, ruleValidations: validations });
   }
 
   if (method === "GET" && pathname === "/api/audit") {
@@ -361,6 +417,57 @@ async function handleApi(req, res, url) {
     return json(res, 201, { ok: true, session });
   }
 
+  const acceptNbaMatch = pathname.match(/^\/api\/nbas\/([^/]+)\/accept$/);
+  if (acceptNbaMatch && method === "POST") {
+    const body = await readBody(req);
+    const nbaId = decodeURIComponent(acceptNbaMatch[1]);
+    const nba = state.domain.nbas.find(item => item.id === nbaId);
+    if (!nba) return json(res, 404, { ok: false, error: "NBA not found" });
+
+    const existing = state.domain.actions.find(item => item.nbaId === nbaId);
+    if (existing) return json(res, 200, { ok: true, action: existing, existing: true });
+
+    let hospitalId = null;
+    let doctorId = null;
+    if (nba.targetType === "hospital") hospitalId = nba.targetId;
+    if (nba.targetType === "doctor") {
+      doctorId = nba.targetId;
+      const doctor = getDoctor(state.domain, doctorId);
+      if (doctor) hospitalId = doctor.hospitalId;
+    }
+    if (nba.targetType === "visit") {
+      const visit = getVisit(state.domain, nba.targetId);
+      if (visit) {
+        hospitalId = visit.hospitalId;
+        doctorId = visit.doctorId;
+      }
+    }
+
+    const action = createAction({
+      id: "act-" + randomUUID(),
+      nbaId: nba.id,
+      sourceType: nba.targetType,
+      sourceEntityId: nba.targetId,
+      hospitalId,
+      doctorId,
+      ownerName: nba.owner,
+      priority: body.priority || 1,
+      title: nba.what,
+      description: nba.why,
+      status: "todo",
+      successSignal: nba.success,
+      dueAt: body.dueAt || null,
+      acceptedBy: body.actor || "demo-user"
+    });
+
+    state.domain.actions.push(action);
+    state.actionStatus[action.id] = action.status;
+    nba.status = "accepted";
+    audit(state, "nba.accept", body.actor, nba.id, "action=" + action.id);
+    writeState(state);
+    return json(res, 201, { ok: true, action });
+  }
+
   const actionMatch = pathname.match(/^\/api\/actions\/([^/]+)$/);
   if (actionMatch && method === "PATCH") {
     const body = await readBody(req);
@@ -370,9 +477,15 @@ async function handleApi(req, res, url) {
       return json(res, 400, { ok: false, error: "Invalid action status" });
     }
     state.actionStatus[actionId] = status;
+    const action = state.domain.actions.find(item => item.id === actionId);
+    if (action) {
+      action.status = status;
+      action.updatedAt = new Date().toISOString();
+      if (status === "done") action.completedAt = new Date().toISOString();
+    }
     audit(state, "action.status", body.actor, actionId, "status=" + status);
     writeState(state);
-    return json(res, 200, { ok: true, actionId, status });
+    return json(res, 200, { ok: true, actionId, status, action: action || null });
   }
 
   if (method === "POST" && pathname === "/api/nba/generate") {
