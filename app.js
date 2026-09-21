@@ -10,6 +10,7 @@
     visitlive: "拜访中",
     hospital: "医院作战",
     doctor: "医生导航",
+    teamcoaching: "团队辅导",
     coaching: "拜访辅导",
     cockpit: "总监驾驶舱",
     pilot: "Pilot 运营",
@@ -58,7 +59,7 @@
     { role: "地区经理", route: "dashboard", kicker: "01 / ACTION", title: "先看今天真正值得做什么", desc: "AI GPS 不是把数据再展示一遍, 而是把医院、医生和拜访信号收敛成少数高优先 NBA." },
     { role: "地区经理", route: "hospital", kicker: "02 / HOSPITAL", title: "找到医院最值得打的业务杠杆", desc: "从机会价值和可改变程度出发, 避免平均投入, 形成 WHO / WHEN / WHAT / SUCCESS." },
     { role: "医药代表", route: "rep", kicker: "03 / REPRESENTATIVE", title: "代表今天怎么真正使用 AI GPS", desc: "从今天拜访谁开始, 完成准备、证据调用、异议应对和下一步承诺." },
-    { role: "地区经理", route: "coaching", kicker: "04 / COACHING", title: "复盘一次失效拜访并替换关键动作", desc: "经理看到的不只是评分, 而是下一次拜访具体要改哪句话、检查什么证据." },
+    { role: "地区经理", route: "teamcoaching", kicker: "04 / TEAM COACHING", title: "经理先看团队, 再决定今天辅导谁", desc: "从团队失效模式、拜访质量和陪练完成度中筛出最值得立即辅导的代表." },
     { role: "销售总监", route: "cockpit", kicker: "05 / MANAGEMENT", title: "管理层只处理真正需要介入的动作", desc: "加资源、纠偏、升级或停止, 而不是月底再看一张结果报表." },
     { role: "销售总监", route: "learning", kicker: "06 / LEARNING", title: "让真实 Outcome 回流为组织判断能力", desc: "有效和无效动作形成 RuleValidation, 高风险规则仍保留 Human Review." },
     { role: "销售总监", route: "pilot", kicker: "07 / PILOT", title: "最后用 8 周 Pilot 验证产品价值", desc: "验证客户愿意用、行动真的发生、结果能回流, 再决定扩展到更多 Agent 和区域." }
@@ -85,6 +86,7 @@
     roleplaySessions: saved.roleplaySessions || {},
     liveVisitTab: "evidence",
     coachingTab: "review",
+    teamCoachingFilter: saved.teamCoachingFilter || "priority",
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -126,6 +128,7 @@
       audioReviews: state.audioReviews,
       reviewSessions: state.reviewSessions,
       roleplaySessions: state.roleplaySessions,
+      teamCoachingFilter: state.teamCoachingFilter,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -839,6 +842,171 @@
       '<div class="drawer-section"><h4>FACT / INFERENCE</h4><div class="drawer-success"><span>FACT</span><span>该证据作为专业沟通依据时必须保留原始来源、版本和适用边界. Agent 生成的话术属于 INFERENCE, 不能改变证据原意.</span></div></div>' +
       '<div class="drawer-section"><h4>当前医生为什么看到它</h4><p class="small-note">' + esc(doc.name) + ' 当前关注 “' + esc(doc.focus) + '”, 系统仅把与当前触发场景直接相关的已审核证据排到前面.</p></div>';
     openDrawer(e[1], body, null);
+  }
+
+  function teamRepRuntime(rep) {
+    var roleplay = coachingRoleplaySession(rep.visitId);
+    var scenario = roleplayScenario(data.visits.find(function(v){ return v.id === rep.visitId; }) || data.visits[0]);
+    var scorecard = roleplayScorecard(roleplay, scenario);
+    var practiceDone = !!roleplay.completed;
+    var practiceScore = practiceDone ? scorecard.overall : Number(rep.practiceScore || 0);
+    var score = practiceDone ? Math.max(Number(rep.score || 0), Math.round((Number(rep.score || 0) + practiceScore) / 2)) : Number(rep.score || 0);
+    var priority = Number(rep.priority || 0);
+    if (practiceDone) priority = Math.max(35, priority - 20);
+    if (score < 65) priority += 5;
+    return {
+      score: score,
+      practiceDone: practiceDone,
+      practiceScore: practiceScore,
+      priority: Math.min(100,priority),
+      conversationRounds: (roleplay.history || []).length,
+      roleplayCompleted: roleplay.completed
+    };
+  }
+
+  function teamRepDimensions(rep) {
+    var visit = data.visits.find(function(v){ return v.id === rep.visitId; }) || data.visits[0];
+    var base = {};
+    (visit.dimensions || []).forEach(function(d){ base[d[0]] = Number(d[1] || 0); });
+    var roleplay = coachingRoleplaySession(rep.visitId);
+    var scorecard = roleplayScorecard(roleplay, roleplayScenario(visit));
+    var map = {};
+    scorecard.scores.forEach(function(x){ if (x.score) map[x.dimension] = x.score; });
+    return {
+      "目标清晰": base["目标清晰"] || 70,
+      "探询质量": map["探询质量"] || base["探询质量"] || 70,
+      "证据匹配": map["证据匹配"] || base["价值呈现"] || 70,
+      "异议处理": map["异议处理"] || base["异议处理"] || 70,
+      "推进承诺": map["推进承诺"] || base["下一步推进"] || 70
+    };
+  }
+
+  function teamCoachingReps() {
+    var reps = (data.teamCoaching && data.teamCoaching.reps || []).map(function(rep){
+      return Object.assign({},rep,{ runtime: teamRepRuntime(rep) });
+    });
+    if (state.teamCoachingFilter === "critical") {
+      reps = reps.filter(function(rep){ return rep.runtime.priority >= 85; });
+    } else if (state.teamCoachingFilter === "practice") {
+      reps = reps.filter(function(rep){ return !rep.runtime.practiceDone; });
+    } else if (state.teamCoachingFilter === "improving") {
+      reps = reps.filter(function(rep){ return Number(rep.score) > Number(rep.previousScore); });
+    }
+    return reps.sort(function(a,b){ return b.runtime.priority - a.runtime.priority; });
+  }
+
+  function openTeamRepCoaching(repId, focusPractice) {
+    var rep = (data.teamCoaching.reps || []).find(function(r){ return r.id === repId; });
+    if (!rep) return;
+    state.selectedVisit = rep.visitId;
+    state.coachingTab = focusPractice ? "diagnosis" : "review";
+    state.route = "coaching";
+    state.role = "地区经理";
+    if (focusPractice) {
+      var review = coachingReviewSession(rep.visitId);
+      if (!review.generated) {
+        review.generated = true;
+        var visit = data.visits.find(function(v){return v.id === rep.visitId;}) || data.visits[0];
+        state.audioReviews[rep.visitId] = {
+          ok:true,
+          duration:"08:42",
+          transcript:[],
+          diagnosis:{
+            topIssue:visit.issue,
+            score:visit.score,
+            evidence:visit.summary,
+            nextAction:visit.nextScript
+          }
+        };
+      }
+      review.issueAccepted = true;
+    }
+    saveState();
+    render();
+    setTimeout(function(){
+      var target = focusPractice ? $(".multi-roleplay-head") : $(".page-banner");
+      if (target) target.scrollIntoView({behavior:"smooth",block:"start"});
+    },60);
+  }
+
+  function renderTeamTrend(rep) {
+    var runtime = rep.runtime || teamRepRuntime(rep);
+    var values = (rep.trend || []).slice();
+    if (runtime.practiceDone && values.length) values[values.length - 1] = runtime.score;
+    return '<div class="team-spark">' + values.map(function(v,i){
+      return '<i style="height:' + Math.max(12,Number(v)) + '%" title="' + esc(v) + '"></i>';
+    }).join("") + '</div>';
+  }
+
+  function renderTeamCoaching() {
+    var allReps = (data.teamCoaching && data.teamCoaching.reps || []).map(function(rep){
+      return Object.assign({},rep,{runtime:teamRepRuntime(rep)});
+    });
+    var reps = teamCoachingReps();
+    var avg = Math.round(allReps.reduce(function(sum,r){return sum+r.runtime.score;},0) / Math.max(1,allReps.length));
+    var critical = allReps.filter(function(r){return r.runtime.priority >= 85;}).length;
+    var practiceDone = allReps.filter(function(r){return r.runtime.practiceDone || r.practice === "已通过";}).length;
+    var avgCommitment = Math.round(allReps.reduce(function(sum,r){return sum+Number(r.commitmentRate||0);},0) / Math.max(1,allReps.length));
+
+    var filters = [
+      ["priority","辅导优先级"],
+      ["critical","需立即辅导"],
+      ["practice","陪练未完成"],
+      ["improving","正在改善"]
+    ].map(function(f){
+      return '<button class="filter-chip ' + (state.teamCoachingFilter===f[0]?"active":"") + '" data-team-filter="' + f[0] + '">' + f[1] + '</button>';
+    }).join("");
+
+    var queue = reps.map(function(rep,index){
+      var rt = rep.runtime;
+      var trendDelta = Number(rep.score) - Number(rep.previousScore);
+      var practiceLabel = rt.practiceDone ? "陪练通过 " + rt.practiceScore : (rep.practice === "已通过" ? "历史已通过 " + rep.practiceScore : rep.practice);
+      return '<article class="team-rep-card ' + (rt.priority>=90?"critical":"") + '">' +
+        '<div class="team-rep-rank"><span>#' + (index+1) + '</span><strong>' + rt.priority + '</strong><small>辅导优先</small></div>' +
+        '<div class="team-rep-main"><div class="team-rep-head"><div><strong>' + esc(rep.name) + '</strong><span>' + esc(rep.territory) + ' · ' + esc(rep.coachingStatus) + '</span></div><span class="status ' + (rt.priority>=90?"risk":(rt.priority>=75?"doing":"done")) + '">' + esc(rep.issue) + '</span></div>' +
+        '<div class="team-rep-insight"><p><b>重复出现 ' + esc(rep.repeated) + ' 次</b> · ' + esc(rep.risk) + '</p><span>下一步: ' + esc(rep.next) + '</span></div>' +
+        '<div class="team-rep-meta"><div><span>最近拜访</span><strong>' + rt.score + '</strong><small>' + (trendDelta>=0?"+":"") + trendDelta + ' vs 上次</small></div><div><span>行为承诺率</span><strong>' + esc(rep.commitmentRate) + '%</strong></div><div><span>NBA 完成</span><strong>' + esc(rep.nbaCompletion) + '%</strong></div><div><span>陪练</span><strong class="' + (rt.practiceDone?"good-text":"") + '">' + esc(practiceLabel) + '</strong></div><div class="team-trend-cell"><span>4 次趋势</span>' + renderTeamTrend(rep) + '</div></div>' +
+        '<div class="team-rep-actions"><button class="btn ghost" data-team-detail="' + rep.id + '">查看拜访</button><button class="btn ' + (rt.practiceDone?"soft":"primary") + '" data-team-practice="' + rep.id + '">' + (rt.practiceDone?"查看陪练证据":"立即开始陪练") + '</button></div></div>' +
+      '</article>';
+    }).join("");
+    if (!queue) queue = '<div class="empty-state"><strong>当前筛选没有代表</strong><span>换一个筛选条件查看团队情况.</span></div>';
+
+    var patterns = (data.teamCoaching.patterns || []).map(function(p){
+      var width = Math.min(100,Math.max(12,Number(p.rate||0)*2.5));
+      return '<div class="pattern-row"><div><strong>' + esc(p.name) + '</strong><span>' + esc(p.dimension) + ' · 本周 ' + esc(p.count) + ' 次</span></div><div class="pattern-bar"><i style="width:' + width + '%"></i></div><b>' + esc(p.rate) + '%</b><em class="' + (p.change<=0?"good":"warn") + '">' + (p.change>0?"+":"") + esc(p.change) + '%</em><p>' + esc(p.action) + '</p></div>';
+    }).join("");
+
+    var dimensions = ["目标清晰","探询质量","证据匹配","异议处理","推进承诺"];
+    var heatHead = dimensions.map(function(d){return '<th>' + esc(d) + '</th>';}).join("");
+    var heatRows = allReps.map(function(rep){
+      var dims = teamRepDimensions(rep);
+      return '<tr><td><b>' + esc(rep.name) + '</b><span>' + esc(rep.territory) + '</span></td>' + dimensions.map(function(d){
+        var score = dims[d];
+        var cls = score>=85?"high":(score>=70?"mid":"low");
+        return '<td><div class="heat-score ' + cls + '">' + score + '</div></td>';
+      }).join("") + '</tr>';
+    }).join("");
+
+    var practiceCards = allReps.map(function(rep){
+      var rt = rep.runtime;
+      var stateText = rt.practiceDone ? "已通过" : (rt.conversationRounds ? "进行中 " + rt.conversationRounds + "/4" : "未开始");
+      var pct = rt.practiceDone ? 100 : Math.round(rt.conversationRounds/4*100);
+      return '<button class="practice-progress-card" data-team-practice="' + rep.id + '"><div><strong>' + esc(rep.name) + '</strong><span>' + esc(rep.issue) + '</span></div><div class="practice-progress-bar"><i style="width:' + pct + '%"></i></div><b>' + esc(stateText) + '</b></button>';
+    }).join("");
+
+    return '<div class="page-banner"><div><span class="banner-kicker">TEAM COACHING WORKSPACE</span><h2>经理今天先辅导谁?</h2><p>先看团队里最影响结果、最可改进、最值得今天介入的行为, 再钻进一次具体拜访.</p></div><div class="banner-side"><strong>' + critical + '</strong><span>高优先辅导对象</span></div></div>' +
+      '<div class="metric-grid">' +
+        metric("团队拜访质量",avg,"5 人最近重点拜访均值",avg>=75?"+3":"需提升","分") +
+        metric("高优先辅导",critical,"优先解决重复失效行为",critical?"今天处理":"良好","辅") +
+        metric("陪练完成",practiceDone+"/5","四轮 AI 模拟通过",practiceDone>=3?"+1":"需推进","练") +
+        metric("明确承诺率",avgCommitment+"%","拜访结束形成可验证下一步",avgCommitment>=70?"改善":"重点","诺") +
+      '</div>' +
+      '<div class="filter-bar"><div class="filter-group">' + filters + '</div><span class="small-note">优先级 = 业务影响 × 问题重复 × 可改进性 × 当前训练状态</span></div>' +
+      '<div class="team-coaching-layout"><div class="stack"><div class="team-coaching-queue">' + queue + '</div></div><div class="stack">' +
+        panel("团队反复失效模式","不是逐个人讲经验, 先看团队最值得系统修复什么",'<div class="pattern-list">' + patterns + '</div>') +
+        panel("AI 陪练完成度","点击代表可直接进入对应四轮训练",'<div class="practice-progress-list">' + practiceCards + '</div>') +
+      '</div></div>' +
+      '<div class="mt-16">' + panel("团队能力热力图","真实拜访评分 + AI 陪练结果会共同影响能力画像",'<div class="heat-table-wrap"><table class="team-heat-table"><thead><tr><th>代表</th>' + heatHead + '</tr></thead><tbody>' + heatRows + '</tbody></table></div>') + '</div>';
   }
 
   function coachingReviewSession(visitId) {
@@ -1960,6 +2128,7 @@
     var view = "";
     if (state.route === "rep") view = renderRep();
     else if (state.route === "visitlive") view = renderVisitLive();
+    else if (state.route === "teamcoaching") view = renderTeamCoaching();
     else if (state.route === "hospital") view = renderHospital();
     else if (state.route === "doctor") view = renderDoctor();
     else if (state.route === "coaching") view = renderCoaching();
@@ -2244,7 +2413,27 @@
       });
     });
 
-    $$("[data-doctor-id]").forEach(function (el) {
+    $("[data-team-filter]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.teamCoachingFilter = el.getAttribute("data-team-filter");
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-team-detail]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        openTeamRepCoaching(el.getAttribute("data-team-detail"), false);
+      });
+    });
+
+    $("[data-team-practice]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        openTeamRepCoaching(el.getAttribute("data-team-practice"), true);
+      });
+    });
+
+    $("[data-doctor-id]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.selectedDoctor = el.getAttribute("data-doctor-id");
         render();
