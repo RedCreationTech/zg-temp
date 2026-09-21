@@ -92,6 +92,10 @@
     serverActions: [],
     ruleValidations: [],
     prepStatus: saved.prepStatus || {},
+    resourceOverrides: saved.resourceOverrides || {},
+    managementDecisions: saved.managementDecisions || {},
+    managementHistory: saved.managementHistory || [],
+    pilotWeek: saved.pilotWeek || 4,
     demoScenario: saved.demoScenario || "hospital_attack",
     demoTourActive: false,
     demoTourStep: 0
@@ -111,6 +115,10 @@
       customRules: state.customRules,
       session: state.session,
       prepStatus: state.prepStatus,
+      resourceOverrides: state.resourceOverrides,
+      managementDecisions: state.managementDecisions,
+      managementHistory: state.managementHistory,
+      pilotWeek: state.pilotWeek,
       demoScenario: state.demoScenario
     }));
   }
@@ -121,6 +129,126 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  var MANAGEMENT_ACTIONS = {
+    add: { label: "加资源", tone: "add", note: "增加跨部门资源或关键支持" },
+    keep: { label: "保持", tone: "keep", note: "方向正确, 保持当前投入与节奏" },
+    correct: { label: "纠偏", tone: "correct", note: "动作偏离策略, 调整目标或执行方式" },
+    escalate: { label: "升级", tone: "escalate", note: "升级到经理或跨部门协同处理" },
+    stop: { label: "停止", tone: "stop", note: "暂停低确定性或低价值投入" }
+  };
+
+  function managementLabel(key) {
+    return MANAGEMENT_ACTIONS[key] ? MANAGEMENT_ACTIONS[key].label : "未决策";
+  }
+
+  function resourceStatus(hospitalId, resource) {
+    var key = hospitalId + ":" + resource.id;
+    return state.resourceOverrides[key] || resource.status;
+  }
+
+  function managementForHospital(hospitalId) {
+    return (data.risks || []).filter(function (r) {
+      return r.targetType === "hospital" && r.targetId === hospitalId && state.managementDecisions[r.id];
+    }).map(function (r) {
+      return { risk: r, decision: state.managementDecisions[r.id] };
+    });
+  }
+
+  function managementForVisit(visitId) {
+    return (data.risks || []).filter(function (r) {
+      return r.targetType === "rep" && r.targetId === visitId && state.managementDecisions[r.id];
+    }).map(function (r) {
+      return { risk: r, decision: state.managementDecisions[r.id] };
+    });
+  }
+
+  function applyManagementEffects(risk, decision) {
+    if (!risk) return;
+
+    if (risk.id === "m1") {
+      if (decision === "add" || decision === "keep") {
+        state.actionStatus.a1 = "doing";
+        state.actionStatus.a2 = "doing";
+      }
+      if (decision === "correct") state.actionStatus.a1 = "risk";
+      if (decision === "escalate") state.actionStatus.a3 = "doing";
+      state.resourceOverrides["h1:r-h1-1"] = decision === "stop" ? "hold" : (decision === "add" ? "doing" : "ready");
+    }
+
+    if (risk.id === "m2") {
+      if (decision === "escalate" || decision === "correct") state.actionStatus.a7 = "doing";
+      if (decision === "stop") state.actionStatus.a7 = "risk";
+    }
+
+    if (risk.id === "m3") {
+      state.actionStatus.a5 = decision === "stop" || decision === "correct" ? "doing" : state.actionStatus.a5 || "todo";
+      state.resourceOverrides["h3:r-h3-3"] = decision === "stop" ? "hold" : (decision === "add" ? "planned" : "hold");
+    }
+
+    if (risk.id === "m4") {
+      if (decision === "keep" || decision === "add") state.actionStatus.a4 = "doing";
+      if (decision === "correct" || decision === "escalate") state.actionStatus.a4 = "risk";
+      state.resourceOverrides["h2:r-h2-1"] = decision === "stop" ? "hold" : "doing";
+    }
+  }
+
+  function applyManagementDecision(riskId, decision) {
+    var risk = (data.risks || []).find(function (r) { return r.id === riskId; });
+    if (!risk || !MANAGEMENT_ACTIONS[decision]) return;
+
+    state.managementDecisions[riskId] = decision;
+    applyManagementEffects(risk, decision);
+    state.managementHistory.unshift({
+      id: "md-" + Date.now(),
+      riskId: riskId,
+      object: risk.object,
+      decision: decision,
+      label: managementLabel(decision),
+      owner: risk.owner,
+      at: new Date().toISOString(),
+      reason: risk.reason
+    });
+    state.managementHistory = state.managementHistory.slice(0, 20);
+    saveState();
+    showToast(risk.object + " · 管理决策: " + managementLabel(decision));
+    render();
+  }
+
+  function clearManagementDecision(riskId) {
+    if (!state.managementDecisions[riskId]) return;
+    delete state.managementDecisions[riskId];
+    saveState();
+    showToast("已撤销该管理决策");
+    render();
+  }
+
+  function computePilotMetrics() {
+    var resolved = Object.keys(state.managementDecisions || {}).length;
+    var demoDone = (data.actions || []).filter(function (a) { return getActionStatus(a) === "done"; }).length;
+    var demoDoing = (data.actions || []).filter(function (a) { return getActionStatus(a) === "doing"; }).length;
+    var formal = state.serverActions || [];
+    var formalDone = formal.filter(function (a) { return a.status === "done"; }).length;
+    var outcomeCount = (state.outcomes || []).length;
+    var approvedRules = (state.ruleValidations || []).filter(function (v) {
+      return v.status === "approved" || v.status === "applied";
+    }).length;
+
+    return {
+      weeklyActive: 84,
+      nbaAdoption: Math.min(94, 76 + Math.min(8, formal.length * 2) + resolved),
+      actionCompletion: Math.min(96, Math.round(68 + demoDone * 2 + demoDoing * 0.7 + formalDone * 3 + resolved * 1.5)),
+      reviewCoverage: Math.min(96, 71 + resolved * 4),
+      ruleReuse: 6 + approvedRules,
+      outcomeRate: Math.min(92, 43 + outcomeCount * 7),
+      marketProof: Math.min(96, 79 + resolved * 2),
+      productProof: Math.min(96, 74 + formal.length * 2 + outcomeCount * 3),
+      dataReadiness: 86,
+      scaleReadiness: Math.min(94, 63 + resolved * 3 + outcomeCount * 3 + approvedRules * 2),
+      resolved: resolved,
+      outcomes: outcomeCount
+    };
   }
 
   function getActionStatus(action) {
