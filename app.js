@@ -128,6 +128,8 @@
     rolloutAlertStates: saved.rolloutAlertStates || {},
     rolloutRootCauseAlertId: saved.rolloutRootCauseAlertId || null,
     rolloutRecoveryStatus: saved.rolloutRecoveryStatus || {},
+    rolloutRecoveryCommands: saved.rolloutRecoveryCommands || {},
+    rolloutMapSelectedRegion: saved.rolloutMapSelectedRegion || "pilot-east1",
     rolloutDecisionLog: saved.rolloutDecisionLog || [],
     rolloutImpactDecisionId: saved.rolloutImpactDecisionId || null,
     rolloutWhatIfScenario: saved.rolloutWhatIfScenario || "pause-region",
@@ -210,6 +212,8 @@
       rolloutAlertStates: state.rolloutAlertStates,
       rolloutRootCauseAlertId: state.rolloutRootCauseAlertId,
       rolloutRecoveryStatus: state.rolloutRecoveryStatus,
+      rolloutRecoveryCommands: state.rolloutRecoveryCommands,
+      rolloutMapSelectedRegion: state.rolloutMapSelectedRegion,
       rolloutDecisionLog: state.rolloutDecisionLog,
       rolloutImpactDecisionId: state.rolloutImpactDecisionId,
       rolloutWhatIfScenario: state.rolloutWhatIfScenario,
@@ -4630,7 +4634,264 @@
       return '<div class="recovery-sequence-row ' + (checked?"done":"") + '"><button class="recovery-check" data-rollout-recovery-alert="' + alert.id + '" data-rollout-recovery-step="' + s.id + '"><span>' + (checked?"✓":"") + '</span></button><div><b>0' + (i+1) + '</b><strong>' + esc(s.title) + '</strong><p>' + esc(s.detail) + '</p></div><button class="recovery-route" data-rollout-recovery-route="' + esc(s.route || rolloutAlertRoute(alert)) + '">进入处理</button></div>';
     }).join("");
 
-    return '<section class="tower-section root-cause-workbench" id="rootCauseWorkbench"><div class="tower-section-head"><div><span>ROOT CAUSE WORKBENCH</span><h2>' + esc(alert.title) + '</h2><p>从最早 Context 偏离开始, 回放相关 Decision, 找到未闭环节点, 再按恢复顺序处理.</p></div><div class="root-cause-status"><b>' + (alert.severity==="high"?"P1":alert.severity==="medium"?"P2":"P3") + '</b><span>' + esc(alert.source) + '</span></div></div><div class="root-cause-chain">' + chainHtml + '</div><div class="root-cause-grid"><div><div class="tower-subtitle">DECISION REPLAY</div><div class="decision-replay-list">' + replay + '</div></div><div><div class="tower-subtitle">RECOVERY SEQUENCE · ' + done + '/' + steps.length + '</div><div class="recovery-sequence-list">' + recovery + '</div><div class="closure-evidence ' + (closure.passed?"passed":"pending") + '"><span>CLOSING EVIDENCE</span><strong>' + (closure.passed?"✓ ":"") + esc(closure.label) + '</strong><p>' + esc(closure.detail) + '</p><small>' + (closure.passed ? "底层关闭条件已经满足. 下一次异常重算会自动退出." : "人工勾选恢复步骤不会关闭异常. 必须满足这个底层条件.") + '</small></div></div></div></section>';
+    return '<section class="tower-section root-cause-workbench" id="rootCauseWorkbench"><div class="tower-section-head"><div><span>ROOT CAUSE WORKBENCH</span><h2>' + esc(alert.title) + '</h2><p>从最早 Context 偏离开始, 回放相关 Decision, 找到未闭环节点, 再按恢复顺序处理.</p></div><div class="root-cause-status"><b>' + (alert.severity==="high"?"P1":alert.severity==="medium"?"P2":"P3") + '</b><span>' + esc(alert.source) + '</span>' + (rolloutRecoveryCommand(alert.id) ? '<button data-rollout-command-focus="' + alert.id + '">查看 Recovery Command</button>' : '<button data-rollout-command-create="' + alert.id + '">生成 Recovery Command</button>') + '</div></div><div class="root-cause-chain">' + chainHtml + '</div><div class="root-cause-grid"><div><div class="tower-subtitle">DECISION REPLAY</div><div class="decision-replay-list">' + replay + '</div></div><div><div class="tower-subtitle">RECOVERY SEQUENCE · ' + done + '/' + steps.length + '</div><div class="recovery-sequence-list">' + recovery + '</div><div class="closure-evidence ' + (closure.passed?"passed":"pending") + '"><span>CLOSING EVIDENCE</span><strong>' + (closure.passed?"✓ ":"") + esc(closure.label) + '</strong><p>' + esc(closure.detail) + '</p><small>' + (closure.passed ? "底层关闭条件已经满足. 下一次异常重算会自动退出." : "人工勾选恢复步骤不会关闭异常. 必须满足这个底层条件.") + '</small></div></div></div></section>';
+  }
+
+  function rolloutAlertRegionIds(alert) {
+    if (!alert) return [];
+    var regions=scalePortfolioRegions();
+    var active=portfolioActiveTargetId();
+    if (alert.source==="90-Day Execution" || alert.source==="Recovery Plan" || alert.source==="Value Gate" || alert.source==="Scale Review" || alert.source==="Portfolio Pace") {
+      return active ? [active] : [];
+    }
+    if (alert.source==="Wave Readiness") {
+      return [String(alert.id || "").replace("candidate-readiness-","")];
+    }
+    if (alert.source==="Wave Planning") {
+      var waveId=String(alert.id || "").replace("wave-","");
+      var map=portfolioWaveMap(regions);
+      return regions.filter(function(r){return map[r.id]===waveId;}).map(function(r){return r.id;});
+    }
+    if (alert.source==="Shared Resource") {
+      var resourceId=String(alert.id || "").replace("resource-","");
+      var ids=["pilot-east1"];
+      if (active) ids.push(active);
+      var reserved=(state.scalePortfolioResourcePlan || {})[resourceId];
+      if (reserved) ids.push(reserved);
+      return ids.filter(function(id,i,arr){return id && arr.indexOf(id)===i;});
+    }
+    if (alert.source==="Portfolio Review") {
+      return regions.map(function(r){return r.id;});
+    }
+    return [];
+  }
+
+  function rolloutRecoverySlaHours(alert) {
+    if (!alert) return 120;
+    if (alert.severity==="high") return 24;
+    if (alert.severity==="medium") return 72;
+    return 120;
+  }
+
+  function rolloutRecoveryStepOwner(alert,step,index) {
+    if (!alert) return "总部管理层";
+    if (alert.source==="Wave Planning") return ["销售卓越","销售总监","资源 Owner","销售总监"][index] || alert.owner;
+    if (alert.source==="Shared Resource") return ["资源 Owner","销售总监","资源 Owner","销售总监"][index] || alert.owner;
+    if (alert.source==="90-Day Execution") return ["区域经理","任务 Owner","任务 Owner","销售总监"][index] || alert.owner;
+    if (alert.source==="Recovery Plan") return ["Gate Owner","任务 Owner","任务 Owner","销售总监"][index] || alert.owner;
+    if (alert.source==="Value Gate") return ["区域经理","代表 / Owner","销售卓越","销售总监"][index] || alert.owner;
+    if (alert.source==="Scale Review") return ["销售卓越","Learning Owner","销售总监","销售总监"][index] || alert.owner;
+    if (alert.source==="Portfolio Pace") return ["销售总监","销售总监","区域经理","销售总监"][index] || alert.owner;
+    if (alert.source==="Portfolio Review") return ["销售总监","销售总监","PMO"][index] || alert.owner;
+    if (alert.source==="Wave Readiness") return ["数据 Owner","销售卓越","资源 Owner","销售总监"][index] || alert.owner;
+    return alert.owner || "总部管理层";
+  }
+
+  function rolloutRecoverySnapshot(alert) {
+    var regions=scalePortfolioRegions();
+    var closure=rolloutAlertClosureEvidence(alert);
+    var active=portfolioActiveTargetId();
+    var activeRegion=regions.find(function(r){return r.id===active;});
+    var activeRiskCount=state.scaleExecutionPlan ? scaleExecutionRiskRegister(state.scaleExecutionPlan).length : 0;
+    var waveRiskCount=portfolioWaveDefinitions().filter(function(w){
+      var s=portfolioWaveSummary(regions,w.id);
+      return s.budgetOver || s.parallelOver;
+    }).length;
+    var currentAlerts=rolloutAlerts();
+    return {
+      capturedAt:new Date().toISOString(),
+      alertPresent:!!currentAlerts.find(function(a){return alert && a.id===alert.id;}),
+      openAlerts:currentAlerts.length,
+      p1:currentAlerts.filter(function(a){return a.severity==="high";}).length,
+      waveRisks:waveRiskCount,
+      resourceConflicts:portfolioResourceConflicts().length,
+      activeScaleRisks:activeRiskCount,
+      activeExecution:activeRegion ? Number(activeRegion.execution || 0) : 0,
+      activeValue:activeRegion && activeRegion.value!=null ? Number(activeRegion.value) : null,
+      activeRepeatability:activeRegion && activeRegion.repeatability!=null ? Number(activeRegion.repeatability) : null,
+      closurePassed:!!closure.passed,
+      closureLabel:closure.label,
+      closureDetail:closure.detail
+    };
+  }
+
+  function createRolloutRecoveryCommand(alertId) {
+    var alert=rolloutAlertById(alertId);
+    if (!alert) {
+      showToast("当前异常已经不存在, 无需生成 Recovery Command");
+      return;
+    }
+    if (!state.rolloutRecoveryCommands) state.rolloutRecoveryCommands={};
+    if (state.rolloutRecoveryCommands[alertId]) {
+      showToast("该异常已经存在 Recovery Command");
+      return;
+    }
+    var createdAt=new Date().toISOString();
+    var sla=rolloutRecoverySlaHours(alert);
+    var steps=rolloutRecoverySteps(alert);
+    state.rolloutRecoveryCommands[alertId]={
+      id:"recovery-command-" + Date.now(),
+      alertId:alertId,
+      title:alert.title,
+      source:alert.source,
+      severity:alert.severity,
+      owner:alert.owner || "总部管理层",
+      createdAt:createdAt,
+      slaHours:sla,
+      dueAt:new Date(Date.parse(createdAt)+sla*3600000).toISOString(),
+      regionIds:rolloutAlertRegionIds(alert),
+      steps:steps.map(function(s,i){
+        return {
+          id:s.id,
+          title:s.title,
+          owner:rolloutRecoveryStepOwner(alert,s,i),
+          route:s.route || rolloutAlertRoute(alert),
+          dueOffsetHours:Math.max(4,Math.round(sla*(i+1)/steps.length))
+        };
+      }),
+      baseline:rolloutRecoverySnapshot(alert)
+    };
+    pushRolloutDecision("recovery","创建 Recovery Command · " + alert.title,"SLA " + sla + "h · Owner " + (alert.owner || "总部管理层") + ".",{alertId:alertId,commandId:state.rolloutRecoveryCommands[alertId].id});
+    saveState();
+    render();
+    showToast("Recovery Command 已生成 · SLA " + sla + "h");
+  }
+
+  function rolloutRecoveryCommand(alertId) {
+    return (state.rolloutRecoveryCommands || {})[alertId] || null;
+  }
+
+  function rolloutRecoveryCommandStatus(command) {
+    if (!command) return {label:"未生成",cls:"none",overdue:false};
+    var alert=rolloutAlertById(command.alertId);
+    var closure=alert ? rolloutAlertClosureEvidence(alert) : {passed:true};
+    var overdue=Date.now()>Date.parse(command.dueAt || 0) && !closure.passed;
+    if (!alert || closure.passed) return {label:"Recovered",cls:"recovered",overdue:false};
+    if (overdue) return {label:"Overdue",cls:"overdue",overdue:true};
+    var done=(command.steps || []).filter(function(s){
+      return !!(state.rolloutRecoveryStatus || {})[rolloutRecoveryKey(command.alertId,s.id)];
+    }).length;
+    return {label:done ? "In Progress" : "Open",cls:done ? "progress" : "open",overdue:false};
+  }
+
+  function rolloutRecoveryPriority(alert) {
+    var command=rolloutRecoveryCommand(alert.id);
+    var status=rolloutRecoveryCommandStatus(command);
+    var base=alert.severity==="high" ? 100 : (alert.severity==="medium" ? 65 : 35);
+    var sourceWeight={
+      "90-Day Execution":24,
+      "Value Gate":22,
+      "Scale Review":22,
+      "Shared Resource":18,
+      "Wave Planning":16,
+      "Recovery Plan":14,
+      "Portfolio Pace":12,
+      "Wave Readiness":10,
+      "Portfolio Review":6
+    }[alert.source] || 8;
+    var regions=rolloutAlertRegionIds(alert).length;
+    return base + sourceWeight + regions*4 + (status.overdue ? 30 : 0);
+  }
+
+  function rolloutRecoveryPriorityList() {
+    return rolloutAlerts().map(function(alert){
+      return {
+        alert:alert,
+        score:rolloutRecoveryPriority(alert),
+        command:rolloutRecoveryCommand(alert.id)
+      };
+    }).sort(function(a,b){return b.score-a.score;});
+  }
+
+  function nationalMapRegionMeta(regionId) {
+    return {
+      "pilot-east1":{x:72,y:34,label:"华东一区"},
+      "east2":{x:80,y:49,label:"华东二区"},
+      "central1":{x:53,y:47,label:"华中一区"},
+      "southcore":{x:59,y:70,label:"华南核心城市"}
+    }[regionId] || {x:50,y:50,label:regionId};
+  }
+
+  function rolloutRegionSituation(region) {
+    var alerts=rolloutAlerts().filter(function(a){
+      return rolloutAlertRegionIds(a).indexOf(region.id)>=0;
+    });
+    var commands=Object.keys(state.rolloutRecoveryCommands || {}).map(function(key){
+      return state.rolloutRecoveryCommands[key];
+    }).filter(function(cmd){
+      return (cmd.regionIds || []).indexOf(region.id)>=0;
+    });
+    var overdue=commands.filter(function(cmd){return rolloutRecoveryCommandStatus(cmd).overdue;}).length;
+    var p1=alerts.filter(function(a){return a.severity==="high";}).length;
+    var tone=overdue || p1 ? "critical" : (alerts.length ? "watch" : (region.type==="candidate" ? "candidate" : "stable"));
+    return {alerts:alerts,commands:commands,overdue:overdue,p1:p1,tone:tone};
+  }
+
+  function renderNationalSituationMap() {
+    var regions=scalePortfolioRegions();
+    var map=portfolioWaveMap(regions);
+    var selected=regions.find(function(r){return r.id===state.rolloutMapSelectedRegion;}) || regions[0];
+    var selectedSituation=rolloutRegionSituation(selected);
+    var selectedWave=map[selected.id]==="baseline" ? "BASELINE" : String(map[selected.id] || "w3").toUpperCase();
+    var markers=regions.map(function(r){
+      var pos=nationalMapRegionMeta(r.id);
+      var situation=rolloutRegionSituation(r);
+      return '<button class="national-map-marker ' + situation.tone + (selected.id===r.id?" selected":"") + '" style="left:' + pos.x + '%;top:' + pos.y + '%" data-rollout-map-region="' + r.id + '"><span>' + (situation.p1?situation.p1:(situation.alerts.length||"✓")) + '</span><strong>' + esc(r.name) + '</strong><small>' + esc(map[r.id]==="baseline"?"BASELINE":String(map[r.id]||"w3").toUpperCase()) + '</small></button>';
+    }).join("");
+    var alertRows=selectedSituation.alerts.slice(0,4).map(function(a){
+      var cmd=rolloutRecoveryCommand(a.id);
+      var status=rolloutRecoveryCommandStatus(cmd);
+      return '<button data-rollout-rootcause="' + a.id + '"><span>' + (a.severity==="high"?"P1":a.severity==="medium"?"P2":"P3") + '</span><div><strong>' + esc(a.title) + '</strong><small>' + (cmd ? esc(status.label) + " · SLA " + cmd.slaHours + "h" : "尚未生成 Recovery Command") + '</small></div></button>';
+    }).join("");
+
+    return '<section class="tower-section national-situation"><div class="tower-section-head"><div><span>NATIONAL SITUATION MAP</span><h2>全国 Rollout 态势地图</h2><p>这是基于当前四个 Demo 区域的经营态势示意图, 不是 GIS 地理系统. 标记直接读取异常、Wave、Stage 和 Recovery Command.</p></div><b>' + regions.length + ' 区域</b></div><div class="national-map-grid"><div class="national-map-canvas"><div class="china-schematic"></div><div class="national-map-axis"><span>北</span><span>南</span></div>' + markers + '</div><div class="national-map-detail"><div class="map-detail-head"><div><span>' + esc(selectedWave) + ' · ' + esc(portfolioStageMeta(selected.stage).label) + '</span><h3>' + esc(selected.name) + '</h3></div><b class="' + selectedSituation.tone + '">' + (selectedSituation.p1 ? selectedSituation.p1 + " P1" : selectedSituation.alerts.length + " 异常") + '</b></div><div class="map-detail-metrics"><div><span>Execution</span><strong>' + selected.execution + '%</strong></div><div><span>Value</span><strong>' + (selected.value==null?"未验证":selected.value+"%") + '</strong></div><div><span>Repeat</span><strong>' + (selected.repeatability==null?"未验证":selected.repeatability+"%") + '</strong></div><div><span>Recovery</span><strong>' + selectedSituation.commands.length + '</strong></div></div><div class="map-alert-list">' + (alertRows || '<div class="tower-empty-good"><strong>当前区域没有总部级异常</strong><span>可继续按现有 Gate / Wave 节奏推进.</span></div>') + '</div><div class="map-detail-actions"><button class="btn ghost" data-rollout-drill-region="' + selected.id + '">区域穿透</button><button class="btn primary" data-route-jump="portfolio">Scale Portfolio</button></div></div></div></section>';
+  }
+
+  function renderRecoveryPriorityBoard() {
+    var rows=rolloutRecoveryPriorityList();
+    return '<section class="tower-section"><div class="tower-section-head"><div><span>RECOVERY PRIORITY</span><h2>跨区域恢复优先级</h2><p>综合 P1/P2、异常来源、影响区域数和 SLA Overdue 排序. 这个分数只用于恢复编排, 不代表业务价值评分.</p></div><b>' + rows.length + ' 条</b></div><div class="recovery-priority-list">' + (rows.length ? rows.map(function(row,i){
+      var a=row.alert;
+      var cmd=row.command;
+      var status=rolloutRecoveryCommandStatus(cmd);
+      var regionNames=rolloutAlertRegionIds(a).map(function(id){
+        return (scalePortfolioRegions().find(function(r){return r.id===id;}) || {}).name || id;
+      });
+      return '<article class="recovery-priority-row ' + status.cls + '"><div class="priority-rank">0' + (i+1) + '</div><div><span>' + esc(a.source) + ' · SCORE ' + row.score + '</span><strong>' + esc(a.title) + '</strong><p>' + esc(regionNames.join(" / ") || "全国组合") + '</p></div><div class="priority-owner"><span>OWNER</span><strong>' + esc(cmd ? cmd.owner : a.owner) + '</strong><small>' + (cmd ? "SLA " + cmd.slaHours + "h · " + status.label : "未生成 Command") + '</small></div><div class="priority-actions"><button data-rollout-rootcause="' + a.id + '">根因</button>' + (cmd ? '<button data-rollout-command-focus="' + a.id + '">Recovery</button>' : '<button data-rollout-command-create="' + a.id + '">生成 Command</button>') + '</div></article>';
+    }).join("") : '<div class="tower-empty-good"><strong>当前没有需要恢复的异常</strong><span>所有 Control Tower 关闭条件均处于可控状态.</span></div>') + '</div></section>';
+  }
+
+  function renderRecoveryCommandCenter() {
+    var commands=Object.keys(state.rolloutRecoveryCommands || {}).map(function(key){return state.rolloutRecoveryCommands[key];}).sort(function(a,b){
+      return Date.parse(b.createdAt || 0)-Date.parse(a.createdAt || 0);
+    });
+    var cards=commands.map(function(cmd){
+      var alert=rolloutAlertById(cmd.alertId);
+      var status=rolloutRecoveryCommandStatus(cmd);
+      var before=cmd.baseline || {};
+      var after=alert ? rolloutRecoverySnapshot(alert) : {
+        capturedAt:new Date().toISOString(),
+        alertPresent:false,
+        openAlerts:rolloutAlerts().length,
+        p1:rolloutAlerts().filter(function(a){return a.severity==="high";}).length,
+        waveRisks:portfolioWaveDefinitions().filter(function(w){var s=portfolioWaveSummary(scalePortfolioRegions(),w.id);return s.budgetOver||s.parallelOver;}).length,
+        resourceConflicts:portfolioResourceConflicts().length,
+        activeScaleRisks:state.scaleExecutionPlan ? scaleExecutionRiskRegister(state.scaleExecutionPlan).length : 0,
+        closurePassed:true,
+        closureLabel:"异常已退出",
+        closureDetail:"底层触发条件已消失."
+      };
+      var done=(cmd.steps || []).filter(function(s){return !!(state.rolloutRecoveryStatus || {})[rolloutRecoveryKey(cmd.alertId,s.id)];}).length;
+      var dueMs=Date.parse(cmd.dueAt || 0)-Date.now();
+      var dueText=status.cls==="recovered" ? "已恢复" : (dueMs>=0 ? Math.ceil(dueMs/3600000) + "h 剩余" : Math.ceil(Math.abs(dueMs)/3600000) + "h 逾期");
+      var stepRows=(cmd.steps || []).map(function(s,i){
+        var checked=!!(state.rolloutRecoveryStatus || {})[rolloutRecoveryKey(cmd.alertId,s.id)];
+        return '<div class="command-step ' + (checked?"done":"") + '"><span>' + (checked?"✓":"0"+(i+1)) + '</span><div><strong>' + esc(s.title) + '</strong><small>' + esc(s.owner) + ' · T+' + s.dueOffsetHours + 'h</small></div></div>';
+      }).join("");
+      return '<article class="recovery-command-card ' + status.cls + '" id="recovery-command-' + esc(cmd.alertId) + '"><div class="command-head"><div><span>' + esc(cmd.source) + ' · ' + (cmd.severity==="high"?"P1":cmd.severity==="medium"?"P2":"P3") + '</span><h3>' + esc(cmd.title) + '</h3></div><b>' + esc(status.label) + '</b></div><div class="command-meta"><div><span>OWNER</span><strong>' + esc(cmd.owner) + '</strong></div><div><span>SLA</span><strong>' + cmd.slaHours + 'h</strong></div><div><span>DUE</span><strong>' + esc(dueText) + '</strong></div><div><span>PROGRESS</span><strong>' + done + '/' + (cmd.steps||[]).length + '</strong></div></div><div class="command-steps">' + stepRows + '</div><div class="before-after"><div><span>BEFORE</span><strong>' + (before.closurePassed?"Closed":"Open") + '</strong><p>P1 ' + Number(before.p1||0) + ' · Wave Risk ' + Number(before.waveRisks||0) + ' · Resource Conflict ' + Number(before.resourceConflicts||0) + '</p><small>' + esc(before.closureDetail || before.closureLabel || "-") + '</small></div><em>→</em><div class="' + (after.closurePassed?"improved":"") + '"><span>NOW</span><strong>' + (after.closurePassed?"Recovered":"Open") + '</strong><p>P1 ' + Number(after.p1||0) + ' · Wave Risk ' + Number(after.waveRisks||0) + ' · Resource Conflict ' + Number(after.resourceConflicts||0) + '</p><small>' + esc(after.closureDetail || after.closureLabel || "-") + '</small></div></div><div class="command-actions"><button data-rollout-rootcause="' + cmd.alertId + '">Root Cause</button>' + (alert ? '<button data-rollout-command-route="' + rolloutAlertRoute(alert) + '">进入处理页</button>' : '<span>底层异常已退出</span>') + '</div></article>';
+    }).join("");
+
+    var overdue=commands.filter(function(cmd){return rolloutRecoveryCommandStatus(cmd).overdue;}).length;
+    return '<section class="tower-section" id="recoveryCommandCenter"><div class="tower-section-head"><div><span>RECOVERY COMMAND CENTER</span><h2>恢复指挥台</h2><p>每个 Command 固化创建时快照、Owner、SLA 和步骤. 当前状态实时重算, 支持 Before / After 对比.</p></div><b>' + overdue + ' Overdue</b></div><div class="recovery-command-grid">' + (cards || '<div class="tower-data-boundary"><strong>还没有 Recovery Command</strong><p>从 Root Cause Workbench 或恢复优先级列表生成第一条指令.</p></div>') + '</div></section>';
   }
 
   function rolloutDependencies() {
@@ -5075,7 +5336,10 @@
     return '<div class="control-tower-page">' +
       '<section class="tower-hero"><div><span>NATIONAL ROLLOUT CONTROL TOWER</span><h1>全国推广真正需要盯的不是页面数量, 而是依赖、异常、资源与决策</h1><p>Control Tower 从现有 Pilot、90 天 Scale、Wave Planning、Evidence 和一线 Demo 数据动态汇总, 不建立第二套脱节状态.</p></div><div><strong>' + open.length + '</strong><span>当前异常</span><button class="tower-hero-link" data-route-jump="portfolio">Scale Portfolio</button></div></section>' +
       '<section class="tower-kpis"><div class="' + (open.length?"risk":"good") + '"><span>开放异常</span><strong>' + open.length + '</strong><small>P1/P2/P3</small></div><div class="' + (escalated?"risk":"") + '"><span>已升级总部</span><strong>' + escalated + '</strong><small>需管理层处理</small></div><div class="' + (blocked?"risk":"good") + '"><span>阻塞依赖</span><strong>' + blocked + '</strong><small>共 ' + deps.length + ' 条</small></div><div class="' + (waveRisk?"risk":"good") + '"><span>Wave 容量异常</span><strong>' + waveRisk + '</strong><small>预算 / 并行</small></div><div><span>正式扩区</span><strong>' + (portfolioActiveTargetId() ? "1" : "0") + '</strong><small>' + (state.scaleExecutionPlan ? esc(state.scaleExecutionPlan.target) : "尚未启动") + '</small></div></section>' +
+      renderNationalSituationMap() +
       '<section class="tower-grid"><div class="tower-section"><div class="tower-section-head"><div><span>EXCEPTION CENTER</span><h2>异常与自动升级</h2><p>只显示当前真实状态触发的异常. 原因消失后, 异常会自动从列表退出.</p></div></div><div class="tower-alert-list">' + (alertCards || '<div class="tower-empty-good"><strong>当前没有开放异常</strong><span>Wave、资源、Gate 和 Evidence 均在可控范围.</span></div>') + '</div></div><div class="tower-section"><div class="tower-section-head"><div><span>DEPENDENCY MAP</span><h2>Rollout 依赖链</h2><p>前一层未通过时, 后一层即使页面上可操作, 也不应被当成正式经营进度.</p></div></div><div class="tower-dependency-list">' + dependencyRows + '</div></div></section>' +
+      renderRecoveryPriorityBoard() +
+      renderRecoveryCommandCenter() +
       renderRolloutRootCauseWorkbench() +
       renderRolloutWhatIf() +
       renderRolloutDrilldown() +
@@ -6022,6 +6286,41 @@
         saveState();
         render();
         window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-rollout-command-create]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        createRolloutRecoveryCommand(el.getAttribute("data-rollout-command-create"));
+      });
+    });
+
+    $$("[data-rollout-command-focus]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var id=el.getAttribute("data-rollout-command-focus");
+        setTimeout(function(){
+          var node=$("#recovery-command-" + id);
+          if (node) node.scrollIntoView({behavior:"smooth",block:"center"});
+        },20);
+      });
+    });
+
+    $$("[data-rollout-command-route]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.route=el.getAttribute("data-rollout-command-route") || "controltower";
+        saveState();
+        render();
+        window.scrollTo({top:0,behavior:"smooth"});
+      });
+    });
+
+    $$("[data-rollout-map-region]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var id=el.getAttribute("data-rollout-map-region") || "pilot-east1";
+        state.rolloutMapSelectedRegion=id;
+        state.rolloutDrill={regionId:id,hospitalId:null,doctorId:null,actionId:null};
+        saveState();
+        render();
       });
     });
 
