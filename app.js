@@ -851,23 +851,28 @@
   }
 
   function teamRepRuntime(rep) {
-    var roleplay = coachingRoleplaySession(rep.visitId);
-    var scenario = roleplayScenario(data.visits.find(function(v){ return v.id === rep.visitId; }) || data.visits[0]);
-    var scorecard = roleplayScorecard(roleplay, scenario);
-    var practiceDone = !!roleplay.completed;
-    var practiceScore = practiceDone ? scorecard.overall : Number(rep.practiceScore || 0);
-    var score = practiceDone ? Math.max(Number(rep.score || 0), Math.round((Number(rep.score || 0) + practiceScore) / 2)) : Number(rep.score || 0);
+    var liveLinked = rep.id === "rep1" || rep.id === "rep2" || rep.id === "rep3";
+    var roleplay = liveLinked ? coachingRoleplaySession(rep.visitId) : null;
+    var scenario = liveLinked ? roleplayScenario(data.visits.find(function(v){ return v.id === rep.visitId; }) || data.visits[0]) : null;
+    var scorecard = liveLinked ? roleplayScorecard(roleplay, scenario) : null;
+    var practiceDone = liveLinked ? !!roleplay.completed : (rep.practice === "已通过");
+    var practiceScore = liveLinked && practiceDone ? scorecard.overall : Number(rep.practiceScore || 0);
+    var score = practiceDone && practiceScore
+      ? Math.max(Number(rep.score || 0), Math.round((Number(rep.score || 0) + practiceScore) / 2))
+      : Number(rep.score || 0);
     var priority = Number(rep.priority || 0);
+
     if (practiceDone) priority = Math.max(35, priority - 20);
     if (state.coachingAgendaStatus && state.coachingAgendaStatus[rep.id]) priority = Math.max(30, priority - 18);
     if (score < 65) priority += 5;
+
     return {
       score: score,
       practiceDone: practiceDone,
       practiceScore: practiceScore,
       priority: Math.min(100,priority),
-      conversationRounds: (roleplay.history || []).length,
-      roleplayCompleted: roleplay.completed
+      conversationRounds: liveLinked ? (roleplay.history || []).length : (rep.practice === "已完成" ? 4 : 0),
+      roleplayCompleted: practiceDone
     };
   }
 
@@ -875,10 +880,13 @@
     var visit = data.visits.find(function(v){ return v.id === rep.visitId; }) || data.visits[0];
     var base = {};
     (visit.dimensions || []).forEach(function(d){ base[d[0]] = Number(d[1] || 0); });
-    var roleplay = coachingRoleplaySession(rep.visitId);
-    var scorecard = roleplayScorecard(roleplay, roleplayScenario(visit));
+    var liveLinked = rep.id === "rep1" || rep.id === "rep2" || rep.id === "rep3";
     var map = {};
-    scorecard.scores.forEach(function(x){ if (x.score) map[x.dimension] = x.score; });
+    if (liveLinked) {
+      var roleplay = coachingRoleplaySession(rep.visitId);
+      var scorecard = roleplayScorecard(roleplay, roleplayScenario(visit));
+      scorecard.scores.forEach(function(x){ if (x.score) map[x.dimension] = x.score; });
+    }
     return {
       "目标清晰": base["目标清晰"] || 70,
       "探询质量": map["探询质量"] || base["探询质量"] || 70,
@@ -2547,11 +2555,11 @@
       });
     });
 
-    $("[data-reset-agenda]").forEach(function (el) {
+    $$("[data-reset-agenda]").forEach(function (el) {
       el.addEventListener("click", resetCoachingAgenda);
     });
 
-    $("[data-agenda-open]").forEach(function (el) {
+    $$("[data-agenda-open]").forEach(function (el) {
       el.addEventListener("click", function () {
         openTeamRepCoaching(el.getAttribute("data-agenda-open"), true);
       });
