@@ -41,7 +41,9 @@ window.ZG_API = (function (fallback) {
         body: JSON.stringify({
           type: type,
           context: context || {},
-          actor: context && context.actor
+          actor: context && context.actor,
+          role: context && context.role,
+          targetId: context && context.targetId
         })
       }, 3000);
       await streamText(result.text, onToken);
@@ -138,6 +140,42 @@ window.ZG_API = (function (fallback) {
     }
   }
 
+
+  async function recordOutcome(payload) {
+    try {
+      return await request("/api/domain/outcomes", {
+        method: "POST",
+        body: JSON.stringify(payload || {})
+      }, 2200);
+    } catch (error) {
+      return { ok: true, offline: true, outcome: Object.assign({ id: "offline-outcome" }, payload || {}) };
+    }
+  }
+
+  async function getDecisions() {
+    try {
+      return await request("/api/domain/decisions", { method: "GET" }, 1600);
+    } catch (error) {
+      return { ok: true, offline: true, decisions: [], nbas: [] };
+    }
+  }
+
+  async function getOutcomes() {
+    try {
+      return await request("/api/domain/outcomes", { method: "GET" }, 1600);
+    } catch (error) {
+      return { ok: true, offline: true, outcomes: [] };
+    }
+  }
+
+  async function getHospitals() {
+    try {
+      return await request("/api/domain/hospitals", { method: "GET" }, 1600);
+    } catch (error) {
+      return { ok: true, offline: true, hospitals: [] };
+    }
+  }
+
   async function health() {
     try {
       return await request("/api/health", { method: "GET" }, 1000);
@@ -155,6 +193,10 @@ window.ZG_API = (function (fallback) {
     transcribeVisit: transcribeVisit,
     saveRule: saveRule,
     syncCRM: syncCRM,
+    recordOutcome: recordOutcome,
+    getDecisions: getDecisions,
+    getOutcomes: getOutcomes,
+    getHospitals: getHospitals,
     createSession: createSession,
     updateActionStatus: updateActionStatus,
     bootstrap: bootstrap,
