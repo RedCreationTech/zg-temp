@@ -191,7 +191,8 @@ window.ZG_DATA = {
     { id: "a3", priority: 2, title: "辅导张蕾重做探询开场", desc: "本次拜访探询质量 54 分, 需要在下一次拜访前完成脚本替换.", entity: "张蕾 · 周敏", owner: "李明", due: "今天", status: "todo", source: "Coaching Agent", success: "完成 1 次角色演练并形成新脚本", why: "探询不足是本次拜访的首要失效点" },
     { id: "a4", priority: 2, title: "确认滨江医院病例共识会", desc: "把医生兴趣转成下周可执行的小型病例共识会.", entity: "王静 · 滨江中心", owner: "赵倩", due: "本周四", status: "doing", source: "Doctor Agent", success: "确定日期、参与医生和 3 个病例", why: "患者识别标准是该院当前首要增长杠杆" },
     { id: "a5", priority: 3, title: "补齐海川医院关键影响者地图", desc: "识别准入、药学和科室影响角色, 暂缓低确定性活动投入.", entity: "海川人民医院", owner: "李明", due: "本周五", status: "todo", source: "Hospital Agent", success: "90% 关键角色有明确影响力和关系记录", why: "当前最大未知是医院决策链" },
-    { id: "a6", priority: 3, title: "沉淀滨江流程切入打法", desc: "把赵倩成功拜访结构转成可测试 Decision Rule.", entity: "组织学习", owner: "销售卓越团队", due: "本周五", status: "todo", source: "Learning Engine", success: "形成 Rule 并在 2 家同类医院验证", why: "该打法具有明确 Context → Action → Outcome 链路" }
+    { id: "a6", priority: 3, title: "沉淀滨江流程切入打法", desc: "把赵倩成功拜访结构转成可测试 Decision Rule.", entity: "组织学习", owner: "销售卓越团队", due: "本周五", status: "todo", source: "Learning Engine", success: "形成 Rule 并在 2 家同类医院验证", why: "该打法具有明确 Context → Action → Outcome 链路" },
+    { id: "a7", priority: 1, title: "辅导刘晨把“下次再来”改成具体承诺", desc: "最近一次拜访内容清楚, 但结束阶段没有形成病例、时间或行为承诺.", entity: "刘晨 · 陈浩", owner: "李明", due: "今天 16:30", status: "todo", source: "Coaching Agent", success: "完成角色演练, 并锁定下一次住院组病例讨论时间", why: "连续无承诺正在让高质量沟通停留在“觉得不错”而没有业务推进" }
   ],
   rules: [
     { id: "R-023", title: "流程问题优先于产品介绍", context: "增长型医院, 科室患者量充足但识别流程不一致", decision: "先诊断流程差异, 不直接进入产品价值", action: "用 3 个典型病例建立科室共识", outcome: "获得病例讨论会邀请", confidence: 91, status: "validated", uses: 12 },
