@@ -1317,11 +1317,14 @@
 
   function renderCockpitBriefImpact() {
     var decisions = collectDirectorDecisionSnapshot();
-    var briefCount = state.weeklyDecisionBrief && state.weeklyDecisionBrief.directorDecisions
-      ? state.weeklyDecisionBrief.directorDecisions.length
-      : 0;
+    var briefDecisions = state.weeklyDecisionBrief && state.weeklyDecisionBrief.directorDecisions
+      ? state.weeklyDecisionBrief.directorDecisions
+      : [];
+    var briefCount = briefDecisions.length;
     var current = decisions.length;
-    var changed = current !== briefCount;
+    var currentSignature = decisions.map(function(d){ return d.riskId + ":" + d.decision; }).sort().join("|");
+    var briefSignature = briefDecisions.map(function(d){ return d.riskId + ":" + d.decision; }).sort().join("|");
+    var changed = currentSignature !== briefSignature;
     var items = decisions.slice(0,4).map(function(d){
       return '<div class="cockpit-brief-impact-item"><span class="management-result ' + esc(d.decision) + '">' + esc(d.label) + '</span><div><strong>' + esc(d.object) + '</strong><p>' + esc(d.resourceImpact) + '</p></div></div>';
     }).join("");
@@ -1697,7 +1700,19 @@
       });
       var outcome = outcomeMatch ? Math.min(92, h.progress + 12) : Math.max(15, Math.round(h.progress * .68));
       var risk = h.progress >= 75 && outcome >= 60 ? "low" : (h.progress >= 50 ? "medium" : "high");
-      return { name:h.name, action:h.progress, outcome:outcome, risk:risk, status:h.status };
+      var directorDecision = (b.directorDecisions || []).find(function(d){
+        return d.targetType === "hospital" && d.targetId === h.id;
+      });
+      return {
+        id:h.id,
+        name:h.name,
+        action:h.progress,
+        outcome:outcome,
+        risk:risk,
+        status:h.status,
+        management:directorDecision ? directorDecision.label : "待决策",
+        resourceImpact:directorDecision ? directorDecision.resourceImpact : "暂无明确资源调整"
+      };
     });
   }
 
@@ -1730,6 +1745,11 @@
     var strongest = [health.momentum,health.execution,health.learning].sort(function(a,b2){return b2.score-a.score;})[0];
     var weakest = [health.momentum,health.execution,health.learning].sort(function(a,b2){return a.score-b2.score;})[0];
 
+    var directorDecisions = b.directorDecisions || [];
+    if (directorDecisions.length) {
+      var labels = directorDecisions.slice(0,3).map(function(d){ return d.object + "·" + d.label; }).join("、");
+      items.push("销售总监本周完成 " + directorDecisions.length + " 项明确管理决策: " + labels + (directorDecisions.length > 3 ? " 等." : "."));
+    }
     if (b.changes && b.changes[0]) items.push(b.changes[0]);
     items.push("当前区域最强环节为 “" + strongest.why + "”, 健康度 " + strongest.score + "%.");
     items.push("当前最需要管理关注的是 “" + weakest.why + "”, 健康度 " + weakest.score + "%.");
@@ -1753,6 +1773,21 @@
     }).join("") + '</div>';
   }
 
+  function renderBriefDirectorDecisions(b, compact) {
+    var decisions = b.directorDecisions || [];
+    if (!decisions.length) {
+      return '<div class="brief-muted">本周 Snapshot 中没有总监管理决策.</div>';
+    }
+    if (compact) {
+      return '<div class="executive-decision-strip">' + decisions.slice(0,4).map(function(d){
+        return '<div><span class="management-result ' + esc(d.decision) + '">' + esc(d.label) + '</span><strong>' + esc(d.object) + '</strong><p>' + esc(d.resourceImpact) + '</p></div>';
+      }).join("") + '</div>';
+    }
+    return '<div class="brief-director-decisions">' + decisions.map(function(d){
+      return '<article class="brief-director-decision"><div class="brief-director-decision-head"><span class="management-result ' + esc(d.decision) + '">' + esc(d.label) + '</span><strong>' + esc(d.object) + '</strong><em>' + esc(d.level) + '风险</em></div><p>' + esc(d.why) + '</p><div class="brief-director-impact"><div><span>资源变化</span><strong>' + esc(d.resourceImpact) + '</strong></div><div><span>执行影响</span><strong>' + esc(d.executionImpact) + '</strong></div></div></article>';
+    }).join("") + '</div>';
+  }
+
   function renderDirectorBriefView() {
     var b = state.weeklyDecisionBrief;
     if (!b) return renderManagerBriefView();
@@ -1763,7 +1798,7 @@
 
     var territoryRows = territories.map(function(t){
       var riskLabel = {low:"低",medium:"中",high:"高"}[t.risk] || t.risk;
-      return '<tr><td><b>' + esc(t.name) + '</b><span>' + esc(t.status) + '</span></td><td><div class="director-progress"><div class="bar"><i style="width:' + t.action + '%"></i></div><b>' + t.action + '%</b></div></td><td><div class="director-progress"><div class="bar"><i style="width:' + t.outcome + '%"></i></div><b>' + t.outcome + '%</b></div></td><td><span class="territory-risk ' + t.risk + '">' + riskLabel + '</span></td></tr>';
+      return '<tr><td><b>' + esc(t.name) + '</b><span>' + esc(t.status) + '</span></td><td><div class="director-progress"><div class="bar"><i style="width:' + t.action + '%"></i></div><b>' + t.action + '%</b></div></td><td><div class="director-progress"><div class="bar"><i style="width:' + t.outcome + '%"></i></div><b>' + t.outcome + '%</b></div></td><td><span class="territory-risk ' + t.risk + '">' + riskLabel + '</span></td><td><b class="director-management-label">' + esc(t.management) + '</b><small>' + esc(t.resourceImpact) + '</small></td></tr>';
     }).join("");
 
     var attentionCards = attention.map(function(a){
@@ -1778,10 +1813,11 @@
       renderBriefToolbar() +
       '<header class="brief-cover director-cover"><div><span>ZG AI GPS · DIRECTOR WEEKLY BRIEF</span><h1>区域经营判断与管理介入</h1><p>总监不需要看到每一条拜访细节, 只需要知道哪里正在推进、哪里需要介入、资源该不该调整.</p></div><div class="brief-meta"><strong>' + esc(b.week) + '</strong><span>' + esc(b.team) + '</span><span>Director View</span><small>Snapshot · ' + esc(briefDateLabel(b.generatedAt)) + '</small></div></header>' +
       '<section class="brief-section"><div class="brief-section-title"><span>01</span><div><h2>区域健康度</h2><p>红黄绿来自同一份 Weekly Snapshot.</p></div></div>' + renderHealthCards(health) + '</section>' +
-      '<section class="brief-two-col"><div class="brief-section"><div class="brief-section-title"><span>02</span><div><h2>Executive Summary</h2><p>只保留会改变管理动作的结论.</p></div></div><div class="director-summary-list">' + summaryCards + '</div></div>' +
-      '<div class="brief-section"><div class="brief-section-title"><span>03</span><div><h2>Management Attention</h2><p>不是风险列表, 而是需要管理判断的问题.</p></div></div><div class="attention-list">' + attentionCards + '</div></div></section>' +
-      '<section class="brief-section"><div class="brief-section-title"><span>04</span><div><h2>Territory Comparison</h2><p>横向比较 Action、Outcome 与风险, 避免只看单个医院.</p></div></div><div class="director-table-wrap"><table class="director-table"><thead><tr><th>区域 / 医院</th><th>Action</th><th>Outcome</th><th>风险</th></tr></thead><tbody>' + territoryRows + '</tbody></table></div></section>' +
-      '<section class="brief-section brief-next"><div class="brief-section-title"><span>05</span><div><h2>下周管理层只盯这些</h2><p>来自经理已确认的下周 Action.</p></div></div><div class="brief-next-list">' + (b.next || []).map(function(item,i){return '<div class="brief-next-item"><span>' + (i+1) + '</span><div><strong>' + esc(item.title) + '</strong><p>' + esc(item.why) + '</p><small>Owner · ' + esc(item.owner) + ' · Success · ' + esc(item.success) + '</small></div></div>';}).join("") + '</div></section>' +
+      '<section class="brief-section"><div class="brief-section-title"><span>02</span><div><h2>本周总监决策与资源变化</h2><p>加资源 / 保持 / 纠偏 / 升级 / 停止, 以及它们对一线执行的直接影响.</p></div></div>' + renderBriefDirectorDecisions(b,false) + '</section>' +
+      '<section class="brief-two-col"><div class="brief-section"><div class="brief-section-title"><span>03</span><div><h2>Executive Summary</h2><p>只保留会改变管理动作的结论.</p></div></div><div class="director-summary-list">' + summaryCards + '</div></div>' +
+      '<div class="brief-section"><div class="brief-section-title"><span>04</span><div><h2>Management Attention</h2><p>不是风险列表, 而是需要管理判断的问题.</p></div></div><div class="attention-list">' + attentionCards + '</div></div></section>' +
+      '<section class="brief-section"><div class="brief-section-title"><span>05</span><div><h2>Territory Comparison</h2><p>横向比较 Action、Outcome 与风险, 避免只看单个医院.</p></div></div><div class="director-table-wrap"><table class="director-table"><thead><tr><th>区域 / 医院</th><th>Action</th><th>Outcome</th><th>风险</th><th>管理动作 / 资源变化</th></tr></thead><tbody>' + territoryRows + '</tbody></table></div></section>' +
+      '<section class="brief-section brief-next"><div class="brief-section-title"><span>06</span><div><h2>下周管理层只盯这些</h2><p>来自经理已确认的下周 Action.</p></div></div><div class="brief-next-list">' + (b.next || []).map(function(item,i){return '<div class="brief-next-item"><span>' + (i+1) + '</span><div><strong>' + esc(item.title) + '</strong><p>' + esc(item.why) + '</p><small>Owner · ' + esc(item.owner) + ' · Success · ' + esc(item.success) + '</small></div></div>';}).join("") + '</div></section>' +
       '<footer class="brief-footer"><div><span>DIRECTOR PRINCIPLE</span><strong>管理层只介入高价值、跨资源或无法由一线自行解决的动作.</strong></div><div><span>SNAPSHOT ID</span><strong>' + esc(b.id) + '</strong></div></footer></div>';
   }
 
@@ -1797,6 +1833,7 @@
       '<header class="executive-cover"><div><span>ZG AI GPS · WEEKLY EXECUTIVE BRIEF</span><h1>本周一句话结论</h1><p>' + esc(b.headline) + '</p></div><div><strong>' + esc(b.week) + '</strong><span>' + esc(b.team) + '</span></div></header>' +
       renderHealthCards(health) +
       '<section class="executive-summary-panel"><div class="executive-summary-title"><span>EXECUTIVE SUMMARY</span><h2>5 条信息看完整个区域</h2></div><div class="executive-summary-items">' + summary.map(function(s,i){return '<div><span>' + (i+1) + '</span><p>' + esc(s) + '</p></div>';}).join("") + '</div></section>' +
+      '<section class="executive-director-decisions"><div class="executive-summary-title"><span>DIRECTOR DECISIONS</span><h2>本周管理层改变了什么</h2></div>' + renderBriefDirectorDecisions(b,true) + '</section>' +
       '<section class="executive-grid"><div class="executive-card"><span>MANAGEMENT ATTENTION</span><h3>需要继续关注</h3><div class="executive-attention">' + attention.map(function(a){return '<div><b>' + esc(a.object) + '</b><p>' + esc(a.question) + '</p><small>' + esc(a.recommendation) + '</small></div>';}).join("") + '</div></div>' +
       '<div class="executive-card"><span>CHAMPION PATTERN</span><h3>值得复制</h3>' + (b.champion ? '<div class="executive-champion"><strong>' + esc(b.champion.name) + '</strong><p>' + esc(b.champion.strength) + '</p><small>承诺率 ' + esc(b.champion.commitmentRate) + '% · NBA ' + esc(b.champion.nbaCompletion) + '%</small></div>' : '<div class="brief-muted">暂无可复制打法</div>') + '</div></section>' +
       '<section class="executive-next"><div><span>NEXT WEEK</span><h2>下周只做 ' + (b.next || []).length + ' 件事</h2></div><div class="executive-next-grid">' + (b.next || []).map(function(item,i){return '<div><span>0' + (i+1) + '</span><strong>' + esc(item.title) + '</strong><p>' + esc(item.owner) + ' · ' + esc(item.success) + '</p></div>';}).join("") + '</div></section>' +
