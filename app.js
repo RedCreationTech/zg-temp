@@ -631,8 +631,10 @@
   function renderRepSchedule() {
     var selected = repVisitById(state.repSelectedVisit);
     var visits = (data.repDay && data.repDay.visits || []).map(function (v) {
-      var statusText = { done: "已完成", next: "下一场", planned: "待拜访" }[v.status] || v.status;
-      var statusClass = v.status === "done" ? "done" : (v.status === "next" ? "doing" : "todo");
+      var session = state.liveVisitSessions[v.id];
+      var effectiveStatus = session && session.ended ? "done" : v.status;
+      var statusText = { done: "已完成", next: "下一场", planned: "待拜访" }[effectiveStatus] || effectiveStatus;
+      var statusClass = effectiveStatus === "done" ? "done" : (effectiveStatus === "next" ? "doing" : "todo");
       return '<button class="rep-visit-card ' + (selected && selected.id === v.id ? "active" : "") + '" data-rep-visit="' + v.id + '">' +
         '<div class="rep-time"><strong>' + esc(v.time) + '</strong><span>' + esc(v.type) + '</span></div>' +
         '<div class="rep-visit-main"><div><strong>' + esc(v.doctor) + '</strong><span>' + esc(v.hospital.replace("华东大学附属第一医院","华东附一")) + ' · ' + esc(v.department) + '</span></div><p>' + esc(v.purpose) + '</p></div>' +
@@ -677,7 +679,9 @@
       selected = data.repDay.visits[0];
       syncRepVisitSelection(selected);
     }
-    var completed = (data.repDay.visits || []).filter(function (v) { return v.status === "done"; }).length;
+    var completed = (data.repDay.visits || []).filter(function (v) {
+      return v.status === "done" || (state.liveVisitSessions[v.id] && state.liveVisitSessions[v.id].ended);
+    }).length;
     return '<div class="page-banner rep-banner"><div><span class="banner-kicker">REPRESENTATIVE WORKSPACE</span><h2>今天不是“拜访 4 个医生”, 而是推进 4 个明确动作</h2><p>' + esc(data.repDay.summary) + '</p></div><div class="banner-side"><strong>' + completed + '/4</strong><span>今日互动已完成</span></div></div>' +
       '<div class="metric-grid">' +
         metric("今日客户互动","4","2 次高优先","", "访") +
@@ -745,6 +749,25 @@
     '</div>';
   }
 
+  function startLiveVisitForDoctor() {
+    var candidates = (data.repDay && data.repDay.visits || []).filter(function (v) {
+      return v.doctorId === state.selectedDoctor && !(state.liveVisitSessions[v.id] && state.liveVisitSessions[v.id].ended);
+    });
+    var visit = candidates[0] || (data.repDay && data.repDay.visits || []).find(function (v) { return v.doctorId === state.selectedDoctor; });
+    if (!visit) { showToast("今日路线中没有这个医生的拜访"); return; }
+    syncRepVisitSelection(visit);
+    var session = liveVisitSession();
+    if (session) {
+      session.started = true;
+      session.startedAt = new Date().toISOString();
+    }
+    state.liveVisitTab = "evidence";
+    state.route = "visitlive";
+    state.role = "医药代表";
+    saveState();
+    render();
+  }
+
   function finishLiveVisit() {
     var visit = repVisitById(state.repSelectedVisit);
     var session = liveVisitSession();
@@ -753,6 +776,7 @@
     if (note && note.value.trim()) session.notes.push(note.value.trim());
     session.ended = true;
     session.endedAt = new Date().toISOString();
+    session.successSignal = session.commitment;
     saveState();
     if (visit.id === "rv2") state.selectedVisit = "v1";
     else if (visit.id === "rv3") state.selectedVisit = "v3";
@@ -792,7 +816,7 @@
           '<div class="mt-16">' + renderPreVisitWorkspace(doc) + '</div>' +
           '<div class="grid-equal">' +
             panel("下一次拜访脚本", "围绕 WHY → WHEN → WHAT → HOW → NEXT", '<div class="script-box"><span class="label">AI RECOMMENDED TALK TRACK</span>' + script + '</div>') +
-            panel("核心证据包", "来源可追溯, 医学审核通过", '<div class="evidence-list">' + evidence + '</div><button class="btn primary full mt-12" data-custom-action="visit-start">开始拜访演示</button>') +
+            panel("核心证据包", "来源可追溯, 医学审核通过", '<div class="evidence-list">' + evidence + '</div><button class="btn primary full mt-12" data-doctor-live>进入拜访中模式</button>') +
           '</div>' +
           '<div class="mt-16">' + renderDoctorJourney(doc) + '</div>' +
         '</div>' +
@@ -821,6 +845,16 @@
       return '<div class="dimension-row"><span>' + esc(x[0]) + '</span><div class="bar"><i style="width:' + x[1] + '%"></i></div><b>' + x[1] + '</b></div>';
     }).join("");
 
+    var repVisit = (data.repDay && data.repDay.visits || []).find(function (rv) {
+      if (state.selectedVisit === "v1") return rv.id === "rv2";
+      if (state.selectedVisit === "v3") return rv.id === "rv3";
+      return rv.id === "rv1" || rv.id === "rv4";
+    });
+    var liveSession = repVisit && state.liveVisitSessions[repVisit.id];
+    var fieldSignal = liveSession && liveSession.ended
+      ? '<div class="field-return"><span>REP FIELD RETURN</span><strong>代表刚刚完成拜访并形成承诺</strong><p>' + esc(liveSession.commitment) + '</p>' + (liveSession.notes && liveSession.notes.length ? '<small>现场记录: ' + esc(liveSession.notes[liveSession.notes.length - 1]) + '</small>' : '') + '</div>'
+      : "";
+
     var tabs = [
       ["review", "拜访复盘"],
       ["diagnosis", "问题诊断"],
@@ -841,6 +875,7 @@
     return '<div class="page-banner"><div><span class="banner-kicker">VISIT COACHING AGENT</span><h2>从一次真实拜访到下一次行动提升</h2><p>经理不再只给经验反馈. 系统还原发生了什么、诊断真正卡点、替换关键句, 并把改进带入下一次拜访.</p></div><div class="banner-side"><strong>' + v.score + '</strong><span>本次拜访质量 / 100</span></div></div>' +
       '<div class="filter-bar"><select class="select-box" id="visitSelect">' + visitOptions + '</select><div class="filter-group"><span class="status ' + (v.severity === "高" ? "risk" : "done") + '">' + esc(v.severity) + '优先级</span><span class="date-chip">' + esc(v.hospital) + '</span></div></div>' +
       renderManagementSignal(managementForVisit(v.id), "经理辅导") +
+      fieldSignal +
       '<div class="grid-2">' +
         panel("拜访质量诊断", v.rep + ' → ' + v.doctor + ' · ' + v.time,
           '<div class="coaching-score"><div class="score-ring" style="background:conic-gradient(#5879df 0 ' + v.score + '%,#e8edf5 ' + v.score + '% 100%)"><div><strong>' + v.score + '</strong><span>综合得分</span></div></div><div>' + dims + '</div></div>'
@@ -1575,7 +1610,8 @@
     $("#pageTitle").textContent = titles[state.route] || "ZG AI GPS";
     $("#roleName").textContent = state.role;
     $$(".nav-item").forEach(function (btn) {
-      btn.classList.toggle("active", btn.getAttribute("data-route") === state.route);
+      var navRoute = btn.getAttribute("data-route");
+      btn.classList.toggle("active", navRoute === state.route || (state.route === "visitlive" && navRoute === "rep"));
     });
 
     var view = "";
@@ -1680,7 +1716,7 @@
       });
     });
 
-    $("[data-rep-visit]").forEach(function (el) {
+    $$("[data-rep-visit]").forEach(function (el) {
       el.addEventListener("click", function () {
         var visit = repVisitById(el.getAttribute("data-rep-visit"));
         syncRepVisitSelection(visit);
@@ -1689,7 +1725,7 @@
       });
     });
 
-    $("[data-rep-task]").forEach(function (el) {
+    $$("[data-rep-task]").forEach(function (el) {
       el.addEventListener("click", function () {
         var id = el.getAttribute("data-rep-task");
         state.repQuickTasks[id] = !state.repQuickTasks[id];
@@ -1698,7 +1734,7 @@
       });
     });
 
-    $("[data-rep-open-doctor]").forEach(function (el) {
+    $$("[data-rep-open-doctor]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.route = "doctor";
         state.role = "医药代表";
@@ -1706,13 +1742,17 @@
       });
     });
 
-    $("[data-rep-prepare]").forEach(function (el) {
+    $$("[data-rep-prepare]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.route = "doctor";
         state.role = "医药代表";
         render();
         setTimeout(function(){ var p=$(".previsit-hero"); if(p) p.scrollIntoView({behavior:"smooth",block:"center"}); },50);
       });
+    });
+
+    $("[data-doctor-live]").forEach(function (el) {
+      el.addEventListener("click", startLiveVisitForDoctor);
     });
 
     $("[data-rep-start-visit]").forEach(function (el) {
@@ -1727,27 +1767,27 @@
       });
     });
 
-    $("[data-live-tab]").forEach(function (el) {
+    $$("[data-live-tab]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.liveVisitTab = el.getAttribute("data-live-tab");
         render();
       });
     });
 
-    $("[data-live-back]").forEach(function (el) {
+    $$("[data-live-back]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.route = "rep";
         render();
       });
     });
 
-    $("[data-live-evidence]").forEach(function (el) {
+    $$("[data-live-evidence]").forEach(function (el) {
       el.addEventListener("click", function () {
         openEvidenceTrace(Number(el.getAttribute("data-live-evidence")));
       });
     });
 
-    $("[data-live-objection]").forEach(function (el) {
+    $$("[data-live-objection]").forEach(function (el) {
       el.addEventListener("click", function () {
         var session = liveVisitSession();
         if (session) session.objection = el.getAttribute("data-objection-text");
@@ -1756,7 +1796,7 @@
       });
     });
 
-    $("[data-live-commitment]").forEach(function (el) {
+    $$("[data-live-commitment]").forEach(function (el) {
       el.addEventListener("click", function () {
         var session = liveVisitSession();
         if (session) session.commitment = el.getAttribute("data-commitment-text");
@@ -1765,11 +1805,11 @@
       });
     });
 
-    $("[data-live-finish]").forEach(function (el) {
+    $$("[data-live-finish]").forEach(function (el) {
       el.addEventListener("click", finishLiveVisit);
     });
 
-    $("[data-doctor-id]").forEach(function (el) {
+    $$("[data-doctor-id]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.selectedDoctor = el.getAttribute("data-doctor-id");
         render();
