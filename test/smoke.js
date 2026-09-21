@@ -70,10 +70,17 @@ async function run() {
   assert(nba.nba && nba.nba.id, "NBA should return structured NBA entity");
   assert(Array.isArray(nba.rules), "NBA should expose applied rules");
 
+  const accepted = await json("/api/nbas/" + encodeURIComponent(nba.nba.id) + "/accept", {
+    method: "POST",
+    body: JSON.stringify({ actor: "Smoke Test", priority: 1 })
+  });
+  assert(accepted.action && accepted.action.nbaId === nba.nba.id, "NBA accept should create Action");
+
   const outcome = await json("/api/domain/outcomes", {
     method: "POST",
     body: JSON.stringify({
       nbaId: nba.nba.id,
+      actionId: accepted.action.id,
       result: "已达成",
       signal: "Smoke test business signal",
       evidence: "test evidence",
@@ -82,6 +89,8 @@ async function run() {
     })
   });
   assert(outcome.outcome && outcome.outcome.effectiveness === 90, "Outcome should persist");
+  assert(outcome.action && outcome.action.status === "done", "Outcome should close Action");
+  assert(Array.isArray(outcome.ruleValidations) && outcome.ruleValidations.length >= 1, "Outcome should create RuleValidation");
 
   const rule = await json("/api/rules", {
     method: "POST",
@@ -105,6 +114,21 @@ async function run() {
   const decisions = await json("/api/domain/decisions");
   assert(Array.isArray(decisions.decisions) && decisions.decisions.length >= 1, "decision trace should persist");
 
+  const actions = await json("/api/domain/actions");
+  assert(Array.isArray(actions.actions) && actions.actions.some(item => item.id === accepted.action.id), "formal Action should persist");
+
+  const validations = await json("/api/domain/rule-validations");
+  assert(Array.isArray(validations.ruleValidations) && validations.ruleValidations.length >= 1, "RuleValidation should persist");
+
+  const reviewCandidate = validations.ruleValidations.find(item => item.status === "review_required");
+  if (reviewCandidate) {
+    const reviewed = await json("/api/domain/rule-validations/" + encodeURIComponent(reviewCandidate.id) + "/review", {
+      method: "POST",
+      body: JSON.stringify({ action: "approve", actor: "Smoke Test Reviewer" })
+    });
+    assert(reviewed.validation.status === "approved", "Human review should approve validation");
+  }
+
   const outcomes = await json("/api/domain/outcomes");
   assert(Array.isArray(outcomes.outcomes) && outcomes.outcomes.length >= 1, "outcome list should persist");
 
@@ -122,7 +146,9 @@ async function run() {
   console.log("✓ session");
   console.log("✓ action persistence");
   console.log("✓ structured NBA / Decision Trace");
+  console.log("✓ NBA accept → Action");
   console.log("✓ Outcome feedback");
+  console.log("✓ RuleValidation / Human Review");
   console.log("✓ Hospital 360 domain API");
   console.log("✓ rule persistence");
   console.log("✓ organization");
