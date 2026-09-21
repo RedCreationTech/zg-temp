@@ -88,6 +88,7 @@
     coachingTab: "review",
     teamCoachingFilter: saved.teamCoachingFilter || "priority",
     coachingAgendaStatus: saved.coachingAgendaStatus || {},
+    coachingAgendaSelection: saved.coachingAgendaSelection || [],
     teamPlaybook: saved.teamPlaybook || null,
     actionFilter: "all",
     selectedAction: null,
@@ -132,6 +133,7 @@
       roleplaySessions: state.roleplaySessions,
       teamCoachingFilter: state.teamCoachingFilter,
       coachingAgendaStatus: state.coachingAgendaStatus,
+      coachingAgendaSelection: state.coachingAgendaSelection,
       teamPlaybook: state.teamPlaybook,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
@@ -943,11 +945,42 @@
     }).join("") + '</div>';
   }
 
-  function teamAgendaCandidates() {
+  function rankedTeamReps() {
     return (data.teamCoaching && data.teamCoaching.reps || [])
       .map(function(rep){ return Object.assign({},rep,{runtime:teamRepRuntime(rep)}); })
-      .sort(function(a,b){ return b.runtime.priority - a.runtime.priority; })
-      .slice(0,2);
+      .sort(function(a,b){ return b.runtime.priority - a.runtime.priority; });
+  }
+
+  function teamAgendaCandidates() {
+    var ranked = rankedTeamReps();
+    var valid = (state.coachingAgendaSelection || []).filter(function(id){
+      return ranked.some(function(rep){ return rep.id === id; });
+    });
+
+    if (valid.length < 2) {
+      valid = ranked.slice(0,2).map(function(rep){ return rep.id; });
+      state.coachingAgendaSelection = valid.slice();
+    }
+
+    return valid.map(function(id){
+      return ranked.find(function(rep){ return rep.id === id; });
+    }).filter(Boolean);
+  }
+
+  function resetCoachingAgenda() {
+    var completedIds = Object.keys(state.coachingAgendaStatus || {}).filter(function(id){
+      return !!state.coachingAgendaStatus[id];
+    });
+    var ranked = rankedTeamReps().filter(function(rep){
+      return completedIds.indexOf(rep.id) < 0;
+    });
+    if (ranked.length < 2) ranked = rankedTeamReps();
+
+    state.coachingAgendaSelection = ranked.slice(0,2).map(function(rep){ return rep.id; });
+    state.coachingAgendaStatus = {};
+    saveState();
+    render();
+    showToast("已重新生成下一轮 30 分钟 Coaching Agenda");
   }
 
   function coachingAgendaItem(rep, index) {
@@ -969,9 +1002,14 @@
   function renderWeeklyAgenda() {
     var top = teamAgendaCandidates();
     var done = top.filter(function(rep){ return !!state.coachingAgendaStatus[rep.id]; }).length;
-    return panel("本周 30 分钟 Coaching Agenda", "经理不用辅导所有人. 本周只选当前最值得介入的 2 人, 每人 15 分钟",
-      '<div class="agenda-summary"><div><span>本周目标</span><strong>2 人 × 15 分钟</strong><p>每个人只练一个最影响结果的行为.</p></div><div><span>已完成</span><strong>' + done + ' / 2</strong><p>' + (done===2?"本周核心辅导闭环已完成":"完成后优先级会重新计算") + '</p></div></div>' +
-      '<div class="agenda-list">' + top.map(coachingAgendaItem).join("") + '</div>'
+    var next = rankedTeamReps().filter(function(rep){
+      return top.every(function(item){ return item.id !== rep.id; });
+    })[0];
+
+    return panel("本周 30 分钟 Coaching Agenda", "本周固定 2 人, 每人 15 分钟. 完成后团队优先队列仍会动态重排",
+      '<div class="agenda-summary"><div><span>本周目标</span><strong>2 人 × 15 分钟</strong><p>每个人只练一个最影响结果的行为.</p></div><div><span>已完成</span><strong>' + done + ' / 2</strong><p>' + (done===2?"本周核心辅导闭环已完成":"完成后团队优先队列会重新计算") + '</p></div></div>' +
+      '<div class="agenda-list">' + top.map(coachingAgendaItem).join("") + '</div>' +
+      '<div class="agenda-footer"><div><span>下一候选</span><strong>' + (next ? esc(next.name + " · " + next.issue + " · 优先 " + next.runtime.priority) : "暂无") + '</strong></div><button class="btn soft" data-reset-agenda>重新生成下一轮 Agenda</button></div>'
     );
   }
 
@@ -2509,13 +2547,17 @@
       });
     });
 
+    $("[data-reset-agenda]").forEach(function (el) {
+      el.addEventListener("click", resetCoachingAgenda);
+    });
+
     $("[data-agenda-open]").forEach(function (el) {
       el.addEventListener("click", function () {
         openTeamRepCoaching(el.getAttribute("data-agenda-open"), true);
       });
     });
 
-    $("[data-agenda-done]").forEach(function (el) {
+    $$("[data-agenda-done]").forEach(function (el) {
       el.addEventListener("click", function () {
         var id = el.getAttribute("data-agenda-done");
         state.coachingAgendaStatus[id] = !state.coachingAgendaStatus[id];
@@ -2525,7 +2567,7 @@
       });
     });
 
-    $("[data-adopt-playbook]").forEach(function (el) {
+    $$("[data-adopt-playbook]").forEach(function (el) {
       el.addEventListener("click", function () {
         var repId = el.getAttribute("data-adopt-playbook");
         var rep = (data.teamCoaching.reps || []).find(function(r){return r.id===repId;});
@@ -2542,7 +2584,7 @@
       });
     });
 
-    $("[data-team-filter]").forEach(function (el) {
+    $$("[data-team-filter]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.teamCoachingFilter = el.getAttribute("data-team-filter");
         saveState();
