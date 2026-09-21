@@ -190,6 +190,24 @@
     '</section>';
   }
 
+  function renderAgentHandoff() {
+    var current = SCENARIOS[state.demoScenario] || SCENARIOS.hospital_attack;
+    var items = [
+      { role: "地区经理", agent: "Hospital Agent", action: "确定医院 Top 杠杆点", status: "done", route: "hospital" },
+      { role: "医药代表", agent: "Doctor Agent", action: "生成医生下一次行动", status: "active", route: "doctor" },
+      { role: "地区经理", agent: "Coaching Agent", action: "修复下一次拜访打法", status: "next", route: "coaching" },
+      { role: "销售总监", agent: "Decision Cockpit", action: "加资源 / 纠偏 / 升级", status: "next", route: "cockpit" }
+    ];
+    var html = items.map(function (item, i) {
+      return '<button class="handoff-step ' + item.status + '" data-route-jump="' + item.route + '">' +
+        '<div class="handoff-no">0' + (i + 1) + '</div><div><span>' + esc(item.role) + '</span><strong>' + esc(item.agent) + '</strong><p>' + esc(item.action) + '</p></div>' +
+      '</button>';
+    }).join('<div class="handoff-arrow">→</div>');
+    return panel("Agent Team 行动交接", "同一个业务目标在不同角色之间继续推进 · 当前故事: " + current.name,
+      '<div class="handoff-chain">' + html + '</div>'
+    );
+  }
+
   function selectScenario(id, silent) {
     var s = SCENARIOS[id];
     if (!s) return;
@@ -316,6 +334,7 @@
       '<div class="hero-meta"><span class="date-chip">2026.09.21 · 周一</span><span class="soft-chip">Pilot 第 4 周</span></div>' +
     '</div>' +
     renderScenarioDeck() +
+    '<div class="mb-16">' + renderAgentHandoff() + '</div>' +
     '<div class="metric-grid">' +
       metric("本周重点医院", "12", "3 家需要经理介入", "+2", "院") +
       metric("高优先 NBA", "18", "6 个尚未执行", "+5", "A") +
@@ -473,7 +492,29 @@
         ) +
       '</div>' +
       '<section class="panel mt-16"><div class="panel-head"><div class="panel-title"><div><h3>结构化辅导工作台</h3><span>复盘 → 诊断 → 改进 → 演练 → 跟进</span></div></div></div><div class="panel-body"><div class="section-tabs">' + tabs + '</div>' + tabBody + '</div></section>' +
+      '<div class="mt-16">' + renderCoachingRewrite(v) + '</div>' +
       '<div class="mt-16">' + renderVoiceReview(v) + '</div>';
+  }
+
+  function renderCoachingRewrite(v) {
+    var original = v.issue === "推进不够"
+      ? "好的, 那您有空再看看, 我下次再来."
+      : "我这里有一组新的真实世界数据, 想和您快速看一下.";
+    var improved = v.issue === "推进不够"
+      ? "下次住院组讨论时, 我们能不能一起判断 1 例边界患者? 我周四下午把病例卡带过来."
+      : "对于这类高风险患者, 您现在决定方案时最看重哪两个标准? 我只看与这两个标准直接相关的证据.";
+    var evidence = v.issue === "推进不够"
+      ? "医生确认具体病例 / 时间 / 下一步承诺"
+      : "代表在呈现证据前完成至少 2 个有效探询问题";
+
+    return panel("关键句替换", "不是告诉代表“加强沟通”, 而是把下一次真正要说的话改出来",
+      '<div class="rewrite-grid">' +
+        '<div class="rewrite-card before"><span>本次原话</span><p>' + esc(original) + '</p><b>问题: ' + esc(v.issue) + '</b></div>' +
+        '<div class="rewrite-arrow">→</div>' +
+        '<div class="rewrite-card after"><span>下一次建议</span><p>' + esc(improved) + '</p><b>目标: 形成可验证行为推进</b></div>' +
+      '</div>' +
+      '<div class="coach-proof"><span>经理下次检查证据</span><strong>' + esc(evidence) + '</strong><button class="btn soft" data-custom-action="coach-adopt">采纳到下一次计划</button></div>'
+    );
   }
 
   function renderCockpit() {
