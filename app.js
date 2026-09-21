@@ -87,6 +87,8 @@
     liveVisitTab: "evidence",
     coachingTab: "review",
     teamCoachingFilter: saved.teamCoachingFilter || "priority",
+    coachingAgendaStatus: saved.coachingAgendaStatus || {},
+    teamPlaybook: saved.teamPlaybook || null,
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -129,6 +131,8 @@
       reviewSessions: state.reviewSessions,
       roleplaySessions: state.roleplaySessions,
       teamCoachingFilter: state.teamCoachingFilter,
+      coachingAgendaStatus: state.coachingAgendaStatus,
+      teamPlaybook: state.teamPlaybook,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -938,6 +942,86 @@
     }).join("") + '</div>';
   }
 
+  function teamAgendaCandidates() {
+    return (data.teamCoaching && data.teamCoaching.reps || [])
+      .map(function(rep){ return Object.assign({},rep,{runtime:teamRepRuntime(rep)}); })
+      .sort(function(a,b){ return b.runtime.priority - a.runtime.priority; })
+      .slice(0,2);
+  }
+
+  function coachingAgendaItem(rep, index) {
+    var visit = data.visits.find(function(v){ return v.id === rep.visitId; }) || data.visits[0];
+    var rt = rep.runtime || teamRepRuntime(rep);
+    var done = !!state.coachingAgendaStatus[rep.id];
+    var focus = rep.issue === "可复制经验" ? "复制成功打法" : rep.issue;
+    var practice = rt.practiceDone ? "复盘已通过陪练证据" : "进入 4 轮 AI 陪练";
+    return '<article class="agenda-item ' + (done ? "done" : "") + '">' +
+      '<div class="agenda-time"><strong>' + (index === 0 ? "00–15" : "15–30") + '</strong><span>分钟</span></div>' +
+      '<div class="agenda-main"><div class="agenda-head"><div><span>COACHING #' + (index+1) + '</span><strong>' + esc(rep.name) + ' · ' + esc(rep.territory) + '</strong></div><span class="status ' + (rt.priority>=90?"risk":"doing") + '">优先 ' + rt.priority + '</span></div>' +
+      '<div class="agenda-focus"><span>本次只练</span><strong>' + esc(focus) + '</strong><p>' + esc(rep.next) + '</p></div>' +
+      '<div class="agenda-check"><div><span>经理检查证据</span><strong>' + esc(practice) + '</strong></div><div><span>成功信号</span><strong>' + esc(visit.nextScript) + '</strong></div></div>' +
+      '<div class="agenda-actions"><button class="btn ghost" data-agenda-open="' + rep.id + '">进入辅导</button><button class="btn ' + (done?"soft":"primary") + '" data-agenda-done="' + rep.id + '">' + (done?"✓ 本周已辅导":"标记本周已辅导") + '</button></div>' +
+      '</div>' +
+    '</article>';
+  }
+
+  function renderWeeklyAgenda() {
+    var top = teamAgendaCandidates();
+    var done = top.filter(function(rep){ return !!state.coachingAgendaStatus[rep.id]; }).length;
+    return panel("本周 30 分钟 Coaching Agenda", "经理不用辅导所有人. 本周只选当前最值得介入的 2 人, 每人 15 分钟",
+      '<div class="agenda-summary"><div><span>本周目标</span><strong>2 人 × 15 分钟</strong><p>每个人只练一个最影响结果的行为.</p></div><div><span>已完成</span><strong>' + done + ' / 2</strong><p>' + (done===2?"本周核心辅导闭环已完成":"完成后优先级会重新计算") + '</p></div></div>' +
+      '<div class="agenda-list">' + top.map(coachingAgendaItem).join("") + '</div>'
+    );
+  }
+
+  function teamTrendStats() {
+    var reps = (data.teamCoaching && data.teamCoaching.reps || []).map(function(rep){
+      return Object.assign({},rep,{runtime:teamRepRuntime(rep)});
+    });
+    var previous = Math.round(reps.reduce(function(sum,r){ return sum + Number(r.previousScore||0); },0) / Math.max(1,reps.length));
+    var current = Math.round(reps.reduce(function(sum,r){ return sum + Number(r.runtime.score||0); },0) / Math.max(1,reps.length));
+    var improving = reps.filter(function(r){ return r.runtime.score > Number(r.previousScore||0); }).length;
+    var declining = reps.filter(function(r){ return r.runtime.score < Number(r.previousScore||0); }).length;
+    var practice = reps.filter(function(r){ return r.runtime.practiceDone || r.practice === "已通过"; }).length;
+    return { previous:previous,current:current,delta:current-previous,improving:improving,declining:declining,practice:practice };
+  }
+
+  function renderTeamTrendPanel() {
+    var stats = teamTrendStats();
+    var reps = (data.teamCoaching.reps || []).map(function(rep){
+      var rt = teamRepRuntime(rep);
+      var delta = rt.score - Number(rep.previousScore||0);
+      return '<div class="weekly-trend-row"><div><strong>' + esc(rep.name) + '</strong><span>' + esc(rep.issue) + '</span></div><div class="weekly-trend-values"><span>' + esc(rep.previousScore) + '</span><em>→</em><strong>' + rt.score + '</strong></div><b class="' + (delta>0?"up":(delta<0?"down":"")) + '">' + (delta>0?"+":"") + delta + '</b></div>';
+    }).join("");
+    return panel("上周 → 本周团队趋势", "不是看一次培训完成率, 而是看真实拜访行为有没有改善",
+      '<div class="team-trend-summary"><div><span>上周均分</span><strong>' + stats.previous + '</strong></div><div><span>本周均分</span><strong>' + stats.current + '</strong></div><div><span>净变化</span><strong class="' + (stats.delta>=0?"good-text":"") + '">' + (stats.delta>0?"+":"") + stats.delta + '</strong></div><div><span>正在改善</span><strong>' + stats.improving + '/5</strong></div></div>' +
+      '<div class="weekly-trend-list">' + reps + '</div>'
+    );
+  }
+
+  function bestTeamPlaybookCandidate() {
+    var reps = (data.teamCoaching && data.teamCoaching.reps || []).map(function(rep){
+      return Object.assign({},rep,{runtime:teamRepRuntime(rep)});
+    }).sort(function(a,b){
+      var aScore = a.runtime.score + Number(a.commitmentRate||0) * .2 + Number(a.nbaCompletion||0) * .1;
+      var bScore = b.runtime.score + Number(b.commitmentRate||0) * .2 + Number(b.nbaCompletion||0) * .1;
+      return bScore-aScore;
+    });
+    return reps[0] || null;
+  }
+
+  function renderTeamPlaybook() {
+    var best = bestTeamPlaybookCandidate();
+    if (!best) return "";
+    var adopted = state.teamPlaybook && state.teamPlaybook.repId === best.id;
+    var visit = data.visits.find(function(v){ return v.id === best.visitId; }) || data.visits[0];
+    return panel("值得复制的团队打法", "不是只找问题, 还要把高质量拜访沉淀成团队共同打法",
+      '<div class="playbook-card"><div class="playbook-origin"><span>CHAMPION PATTERN</span><strong>' + esc(best.name) + ' · ' + esc(best.territory) + '</strong><p>' + esc(best.strength) + '</p></div>' +
+      '<div class="playbook-flow"><div><b>CONTEXT</b><span>' + esc(visit.summary) + '</span></div><em>→</em><div><b>ACTION</b><span>' + esc(visit.nextScript) + '</span></div><em>→</em><div><b>OUTCOME</b><span>行为承诺率 ' + esc(best.commitmentRate) + '% · NBA 完成 ' + esc(best.nbaCompletion) + '%</span></div></div>' +
+      '<div class="playbook-actions"><div><span>建议复制给</span><strong>本周同类场景代表 3 人</strong></div><button class="btn ' + (adopted?"soft":"primary") + '" data-adopt-playbook="' + best.id + '">' + (adopted?"✓ 已采纳为团队打法":"采纳为本周团队打法") + '</button></div></div>'
+    );
+  }
+
   function renderTeamCoaching() {
     var allReps = (data.teamCoaching && data.teamCoaching.reps || []).map(function(rep){
       return Object.assign({},rep,{runtime:teamRepRuntime(rep)});
@@ -1002,7 +1086,9 @@
         metric("明确承诺率",avgCommitment+"%","拜访结束形成可验证下一步",avgCommitment>=70?"改善":"重点","诺") +
       '</div>' +
       '<div class="filter-bar"><div class="filter-group">' + filters + '</div><span class="small-note">优先级 = 业务影响 × 问题重复 × 可改进性 × 当前训练状态</span></div>' +
-      '<div class="team-coaching-layout"><div class="stack"><div class="team-coaching-queue">' + queue + '</div></div><div class="stack">' +
+      '<div class="grid-equal mt-16"><div>' + renderWeeklyAgenda() + '</div><div>' + renderTeamTrendPanel() + '</div></div>' +
+      '<div class="mt-16">' + renderTeamPlaybook() + '</div>' +
+      '<div class="team-coaching-layout mt-16"><div class="stack"><div class="team-coaching-queue">' + queue + '</div></div><div class="stack">' +
         panel("团队反复失效模式","不是逐个人讲经验, 先看团队最值得系统修复什么",'<div class="pattern-list">' + patterns + '</div>') +
         panel("AI 陪练完成度","点击代表可直接进入对应四轮训练",'<div class="practice-progress-list">' + practiceCards + '</div>') +
       '</div></div>' +
@@ -2413,7 +2499,40 @@
       });
     });
 
-    $$("[data-team-filter]").forEach(function (el) {
+    $("[data-agenda-open]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        openTeamRepCoaching(el.getAttribute("data-agenda-open"), true);
+      });
+    });
+
+    $("[data-agenda-done]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var id = el.getAttribute("data-agenda-done");
+        state.coachingAgendaStatus[id] = !state.coachingAgendaStatus[id];
+        saveState();
+        render();
+        showToast(state.coachingAgendaStatus[id] ? "已完成本周 15 分钟辅导" : "已取消本周辅导完成状态");
+      });
+    });
+
+    $("[data-adopt-playbook]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var repId = el.getAttribute("data-adopt-playbook");
+        var rep = (data.teamCoaching.reps || []).find(function(r){return r.id===repId;});
+        if (!rep) return;
+        if (state.teamPlaybook && state.teamPlaybook.repId === repId) {
+          state.teamPlaybook = null;
+          showToast("已取消本周团队打法");
+        } else {
+          state.teamPlaybook = { repId:repId, name:rep.name, issue:rep.issue, adoptedAt:new Date().toISOString() };
+          showToast(rep.name + " 的打法已采纳为本周团队打法");
+        }
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-team-filter]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.teamCoachingFilter = el.getAttribute("data-team-filter");
         saveState();
