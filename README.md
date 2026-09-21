@@ -812,6 +812,141 @@ Scale Operations Cockpit
 Day 60 / Day 90 Review
 ```
 
+## 本轮 Scale Portfolio Command Center
+
+当前原型已经从“单一区域扩区计划”继续升级到总部级多区域组合运营。
+
+新增左侧入口：
+
+```text
+扩区组合
+→ Scale Portfolio
+```
+
+### 区域组合视图
+
+总部可以在一张页面同时看到：
+
+- 当前 Pilot 基准区
+- 正在执行的正式扩区区域
+- 尚未启动的候选区域
+- 各区域数据准备度
+- 当前执行进度
+- 已验证 Value
+- Repeatability
+- 风险数量
+- 资源负荷
+
+其中候选区域不会虚构业务 Value。
+
+在没有正式运行以前，只展示：
+
+```text
+场景相似度
++
+数据准备度
++
+复制成本
+```
+
+### 下一批候选依据
+
+系统会基于：
+
+```text
+48% 场景相似度
++
+37% 数据准备度
++
+15% 复制成本
+```
+
+形成候选分。
+
+这个分数用于解释“为什么下一个区域值得先准备”，不是业务结果预测。
+
+点击候选区域以后，可以：
+
+```text
+设为下次扩区候选
+```
+
+并同步回 Scale Gate 的目标区域选择。
+
+### 跨区域共享资源
+
+Portfolio 增加总部共享资源容量：
+
+- 医学支持
+- 数据运营
+- 销售卓越
+- 产品运营
+- 区域管理
+
+当前 Pilot、正在执行的 Scale 区域，以及为下一阶段提前预留的区域会共同占用容量。
+
+如果同时复制过多区域，会出现：
+
+```text
+容量冲突
+```
+
+用于演示总部为什么不能只看区域意愿，而必须管理跨区域稀缺资源。
+
+### Champion Pattern 跨区复制
+
+Portfolio 会跟踪同一个 Champion Pattern 在不同区域的复制进度：
+
+```text
+未开始
+→ 场景匹配
+→ 小样本验证
+→ 已复现
+```
+
+为了避免演示数据失真，当前有以下约束：
+
+- 尚未正式扩区的候选区域，只允许做到“场景匹配”
+- 正式扩区区域进入 Day 60 后，才允许继续做小样本验证
+- 最终标记“已复现”前，必须先完成 Repeatability Evidence 中的 Champion Pattern 验证
+
+因此跨区复制与现有 Day 60 / Day 90 Gate 共用同一条证据链。
+
+### HQ Action Board
+
+总部页最后会自动把复杂信息收敛成少量管理动作，例如：
+
+- 当前正式扩区区域下一步 Gate
+- 下一候选区域
+- 当前共享资源冲突
+- Champion Pattern 尚未完成复制的区域
+
+当前 Scale 管理链进一步变为：
+
+```text
+Pilot
+↓
+Scale Gate
+↓
+30 / 60 / 90 Execution
+↓
+Second Wave Ramp-up
+↓
+Value Evidence
+↓
+Repeatability Evidence
+↓
+Scale Portfolio
+↓
+跨区域资源管理
+↓
+Champion Pattern 跨区复制
+↓
+下一轮 Scale Decision
+```
+
+整个 Portfolio 仍然是纯前端模拟，不连接真实后台。
+
 ## 本轮 Scale Value / Repeatability Evidence 增强
 
 Scale Operations 继续从“启动第二批”推进到“证明第二批真的跑起来”。
