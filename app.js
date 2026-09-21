@@ -112,6 +112,9 @@
     scaleRecoveryPlans: saved.scaleRecoveryPlans || {},
     scaleOwnerCommitments: saved.scaleOwnerCommitments || {},
     scaleSecondWaveLaunch: saved.scaleSecondWaveLaunch || { hospitals:{}, reps:{}, startedAt:null },
+    scaleSecondWaveRamp: saved.scaleSecondWaveRamp || { hospitals:{}, reps:{} },
+    scaleValueEvidence: saved.scaleValueEvidence || {},
+    scaleRepeatabilityEvidence: saved.scaleRepeatabilityEvidence || {},
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -175,6 +178,9 @@
       scaleRecoveryPlans: state.scaleRecoveryPlans,
       scaleOwnerCommitments: state.scaleOwnerCommitments,
       scaleSecondWaveLaunch: state.scaleSecondWaveLaunch,
+      scaleSecondWaveRamp: state.scaleSecondWaveRamp,
+      scaleValueEvidence: state.scaleValueEvidence,
+      scaleRepeatabilityEvidence: state.scaleRepeatabilityEvidence,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -2958,6 +2964,9 @@
     state.scaleRecoveryPlans = {};
     state.scaleOwnerCommitments = {};
     state.scaleSecondWaveLaunch = { hospitals:{}, reps:{}, startedAt:null };
+    state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
+    state.scaleValueEvidence = {};
+    state.scaleRepeatabilityEvidence = {};
     saveState();
     render();
     showToast("Scale Execution Plan 已按当前决策重新生成");
@@ -3072,9 +3081,23 @@
       return !!state.scaleExecutionChecks["data-" + (i+1)];
     }).length;
     var dataPct = (plan.dataChecklist || []).length ? Math.round(dataDone/(plan.dataChecklist || []).length*100) : 100;
-    if (status === "pass" && (progress.pct < 100 || risks.length || (gateId === "g30" && dataPct < 90))) {
-      showToast(gateId === "g30" && dataPct < 90 ? "Day 30 通过前, 数据准备清单需达到 90%" : "存在未完成任务或风险, 不能直接标记“通过”");
-      return;
+    if (status === "pass") {
+      if (progress.pct < 100 || risks.length) {
+        showToast("存在未完成任务或风险, 不能直接标记“通过”");
+        return;
+      }
+      if (gateId === "g30" && dataPct < 90) {
+        showToast("Day 30 通过前, 数据准备清单需达到 90%");
+        return;
+      }
+      if (gateId === "g60" && !scaleEvidenceStatus("value").requiredPassed) {
+        showToast("Day 60 通过前, NBA 采纳、Action 完成和正向 Outcome 三项 Value Evidence 必须验证");
+        return;
+      }
+      if (gateId === "g90" && !scaleEvidenceStatus("repeatability").requiredPassed) {
+        showToast("Day 90 通过前, Champion Pattern、Decision Rule 和管理闭环三项复制证据必须验证");
+        return;
+      }
     }
     state.scaleExecutionGateReviews[gateId] = {
       status:status,
@@ -3278,11 +3301,165 @@
     if (!state.scaleSecondWaveLaunch) state.scaleSecondWaveLaunch = {hospitals:{},reps:{},startedAt:null};
     var bucket = type === "hospital" ? state.scaleSecondWaveLaunch.hospitals : state.scaleSecondWaveLaunch.reps;
     bucket[id] = !bucket[id];
+    if (!state.scaleSecondWaveRamp) state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
+    var rampBucket = type === "hospital" ? state.scaleSecondWaveRamp.hospitals : state.scaleSecondWaveRamp.reps;
+    if (bucket[id]) {
+      if (rampBucket[id] == null) rampBucket[id] = 0;
+    } else {
+      delete rampBucket[id];
+    }
     if (!state.scaleSecondWaveLaunch.startedAt && Object.keys(bucket).some(function(k){return !!bucket[k];})) {
       state.scaleSecondWaveLaunch.startedAt = new Date().toISOString();
     }
     saveState();
     render();
+  }
+
+
+  function secondWaveRampDefinition(type) {
+    return type === "hospital"
+      ? ["已启动","Context Ready","Top Lever 已锁定","首个 NBA 已执行","首个 Outcome 已记录"]
+      : ["已启动","能力基线完成","首访完成","Coaching 完成","连续两次达标"];
+  }
+
+  function secondWaveRampState(type,id) {
+    var ramp = state.scaleSecondWaveRamp || { hospitals:{}, reps:{} };
+    var bucket = type === "hospital" ? ramp.hospitals : ramp.reps;
+    return Math.max(0,Math.min(4,Number(bucket[id] || 0)));
+  }
+
+  function secondWaveObjectStarted(type,id) {
+    var launch = state.scaleSecondWaveLaunch || { hospitals:{}, reps:{} };
+    var bucket = type === "hospital" ? launch.hospitals : launch.reps;
+    return !!bucket[id];
+  }
+
+  function advanceSecondWaveRamp(type,id) {
+    if (!secondWaveObjectStarted(type,id)) {
+      showToast("请先启动该第二批对象");
+      return;
+    }
+    if (!state.scaleSecondWaveRamp) state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
+    var bucket = type === "hospital" ? state.scaleSecondWaveRamp.hospitals : state.scaleSecondWaveRamp.reps;
+    var next = Math.min(4,secondWaveRampState(type,id)+1);
+    bucket[id] = next;
+    saveState();
+    render();
+    showToast(secondWaveRampDefinition(type)[next]);
+  }
+
+  function secondWaveRampStats(plan) {
+    var wave = scaleSecondWave(plan);
+    var sum = 0;
+    var started = 0;
+    var productive = 0;
+    [["hospital",wave.hospitals],["rep",wave.reps]].forEach(function(group){
+      group[1].forEach(function(item){
+        if (!secondWaveObjectStarted(group[0],item.id)) return;
+        started += 1;
+        var step = secondWaveRampState(group[0],item.id);
+        sum += step;
+        if (step >= 4) productive += 1;
+      });
+    });
+    return {
+      started:started,
+      productive:productive,
+      pct:started ? Math.round(sum/(started*4)*100) : 0
+    };
+  }
+
+  function renderSecondWaveRamp(plan) {
+    var wave = scaleSecondWave(plan);
+    var rows = [];
+    [["hospital",wave.hospitals],["rep",wave.reps]].forEach(function(group){
+      group[1].forEach(function(item){
+        if (!secondWaveObjectStarted(group[0],item.id)) return;
+        var defs = secondWaveRampDefinition(group[0]);
+        var step = secondWaveRampState(group[0],item.id);
+        var pct = Math.round(step/4*100);
+        rows.push(
+          '<div class="ramp-row"><div><span>' + (group[0] === "hospital" ? "HOSPITAL" : "REP") + '</span><strong>' + esc(item.name) + '</strong><small>' + esc(defs[step]) + '</small></div>' +
+          '<div class="ramp-progress"><div class="bar"><i style="width:' + pct + '%"></i></div><b>' + pct + '%</b></div>' +
+          '<button data-second-wave-ramp="' + group[0] + '" data-second-wave-ramp-id="' + item.id + '" ' + (step >= 4 ? "disabled" : "") + '>' + (step >= 4 ? "已进入稳定运行" : "推进里程碑") + '</button></div>'
+        );
+      });
+    });
+    var stats = secondWaveRampStats(plan);
+    return '<section class="scale-operations-section second-wave-ramp"><div class="scale-plan-section-title"><span>04</span><div><h2>第二批爬坡看板</h2><p>“已启动”不是终点. 医院要跑到首个 Outcome, 代表要跑到连续两次达标.</p></div></div>' +
+      '<div class="ramp-summary"><div><span>已启动对象</span><strong>' + stats.started + '</strong></div><div><span>爬坡完成度</span><strong>' + stats.pct + '%</strong></div><div><span>稳定运行</span><strong>' + stats.productive + '</strong></div></div>' +
+      '<div class="ramp-list">' + (rows.length ? rows.join("") : '<div class="brief-muted">Day 30 Gate 解锁后, 先在上方启动第二批医院或代表, 再进入爬坡管理.</div>') + '</div></section>';
+  }
+
+  function scaleValueEvidenceDefinitions() {
+    return [
+      { id:"nba", label:"NBA 采纳 ≥70%", source:"Doctor / Hospital Agent", detail:"扩区代表对高优先 NBA 的采纳达到门槛.", required:true },
+      { id:"action", label:"Action 完成 ≥70%", source:"Execution Cockpit", detail:"被采纳的动作能够在承诺时间内执行.", required:true },
+      { id:"outcome", label:"至少 2 类正向 Outcome", source:"Outcome Review", detail:"客户行为或业务里程碑出现可复现正向变化.", required:true },
+      { id:"review", label:"连续 2 周 Weekly Review", source:"Manager Review", detail:"管理动作、Outcome 和风险被连续闭环复盘.", required:false }
+    ];
+  }
+
+  function scaleRepeatabilityEvidenceDefinitions() {
+    return [
+      { id:"champion", label:"Champion Pattern 跨场景复现", source:"Learning Engine", detail:"至少在 2–3 个同类场景复现同一正向打法.", required:true },
+      { id:"rule", label:"Decision Rule 候选证据完整", source:"Decision Trace", detail:"Context → Decision → Action → Outcome 链路可追溯.", required:true },
+      { id:"closure", label:"管理闭环稳定运行", source:"Director + Weekly Review", detail:"风险、资源和 Owner 承诺能持续形成管理闭环.", required:true }
+    ];
+  }
+
+  function scaleEvidenceStatus(kind) {
+    var defs = kind === "repeatability" ? scaleRepeatabilityEvidenceDefinitions() : scaleValueEvidenceDefinitions();
+    var store = kind === "repeatability" ? (state.scaleRepeatabilityEvidence || {}) : (state.scaleValueEvidence || {});
+    var required = defs.filter(function(x){return x.required;});
+    var requiredDone = required.filter(function(x){return !!store[x.id];}).length;
+    var allDone = defs.filter(function(x){return !!store[x.id];}).length;
+    return {
+      requiredDone:requiredDone,
+      requiredTotal:required.length,
+      requiredPassed:required.length > 0 && requiredDone === required.length,
+      allDone:allDone,
+      total:defs.length,
+      pct:defs.length ? Math.round(allDone/defs.length*100) : 0
+    };
+  }
+
+  function toggleScaleEvidence(kind,id) {
+    var g30 = state.scaleExecutionGateReviews.g30;
+    var g60 = state.scaleExecutionGateReviews.g60;
+    if (kind === "value" && !(g30 && g30.status !== "hold")) {
+      showToast("先通过 Day 30 Launch Gate, 再验证 Value Evidence");
+      return;
+    }
+    if (kind === "repeatability" && !(g60 && g60.status !== "hold")) {
+      showToast("先通过 Day 60 Value Gate, 再验证 Repeatability Evidence");
+      return;
+    }
+    var store = kind === "repeatability" ? state.scaleRepeatabilityEvidence : state.scaleValueEvidence;
+    store[id] = !store[id];
+    saveState();
+    render();
+  }
+
+  function renderEvidenceCards(kind,defs,enabled) {
+    var store = kind === "repeatability" ? (state.scaleRepeatabilityEvidence || {}) : (state.scaleValueEvidence || {});
+    return defs.map(function(item){
+      var done = !!store[item.id];
+      return '<button class="scale-proof-card ' + (done ? "verified" : "") + '" data-scale-evidence="' + kind + '" data-scale-evidence-id="' + item.id + '" ' + (!enabled ? "disabled" : "") + '>' +
+        '<div class="proof-check">' + (done ? "✓" : "") + '</div><div><span>' + esc(item.source) + (item.required ? " · REQUIRED" : " · SUPPORTING") + '</span><strong>' + esc(item.label) + '</strong><p>' + esc(item.detail) + '</p></div><b>' + (done ? "已验证" : "验证证据") + '</b></button>';
+    }).join("");
+  }
+
+  function renderScaleEvidenceRoom(plan) {
+    var g30 = state.scaleExecutionGateReviews.g30;
+    var g60 = state.scaleExecutionGateReviews.g60;
+    var valueEnabled = !!(g30 && g30.status !== "hold");
+    var repeatEnabled = !!(g60 && g60.status !== "hold");
+    var value = scaleEvidenceStatus("value");
+    var repeat = scaleEvidenceStatus("repeatability");
+    return '<section class="scale-operations-section scale-proof-room"><div class="scale-plan-section-title"><span>05</span><div><h2>Value / Repeatability Evidence Room</h2><p>Gate 通过必须有业务证据, 不能只看任务是否完成.</p></div></div>' +
+      '<div class="proof-room-grid"><div class="' + (valueEnabled ? "" : "locked") + '"><div class="proof-room-head"><div><span>DAY 60 · VALUE EVIDENCE</span><strong>Action 是否真的改变客户行为?</strong></div><b>' + value.requiredDone + '/' + value.requiredTotal + ' 必选</b></div><div class="scale-proof-list">' + renderEvidenceCards("value",scaleValueEvidenceDefinitions(),valueEnabled) + '</div></div>' +
+      '<div class="' + (repeatEnabled ? "" : "locked") + '"><div class="proof-room-head"><div><span>DAY 90 · REPEATABILITY</span><strong>打法是否能跨对象复制?</strong></div><b>' + repeat.requiredDone + '/' + repeat.requiredTotal + ' 必选</b></div><div class="scale-proof-list">' + renderEvidenceCards("repeatability",scaleRepeatabilityEvidenceDefinitions(),repeatEnabled) + '</div></div></div></section>';
   }
 
   function renderGateReviewOperations(plan) {
@@ -3299,7 +3476,7 @@
         }).join("") + '<div class="recovery-foot"><span>Owner 承诺</span><strong>' + committed + '/' + recovery.length + '</strong></div></div>' : '') +
       '</article>';
     }).join("");
-    return '<section class="scale-operations-section"><div class="scale-plan-section-title"><span>07</span><div><h2>Gate Review 会议与恢复计划</h2><p>Review 不是状态标签, 而是会议结论、恢复动作和 Owner 承诺.</p></div></div><div class="gate-ops-grid">' + cards + '</div></section>';
+    return '<section class="scale-operations-section"><div class="scale-plan-section-title"><span>09</span><div><h2>Gate Review 会议与恢复计划</h2><p>Review 不是状态标签, 而是会议结论、恢复动作和 Owner 承诺.</p></div></div><div class="gate-ops-grid">' + cards + '</div></section>';
   }
 
   function renderScaleOperationsCockpit(plan) {
@@ -3313,14 +3490,16 @@
     var g60Advanced = !!(g60 && g60.status !== "hold");
     var g90Advanced = !!(g90 && g90.status !== "hold");
     var wave = secondWaveLaunchStats(plan);
+    var ramp = secondWaveRampStats(plan);
+    var valueProof = scaleEvidenceStatus("value");
     var recoveryTotal = Object.keys(state.scaleRecoveryPlans || {}).reduce(function(sum,key){return sum+(state.scaleRecoveryPlans[key]||[]).length;},0);
     var recoveryCommitted = Object.keys(state.scaleRecoveryPlans || {}).reduce(function(sum,key){return sum+(state.scaleRecoveryPlans[key]||[]).filter(function(x){return x.committed;}).length;},0);
 
     var stage = g90Advanced ? "Day 90 Scale Review" : (g60Advanced ? "61–90 天复制验证" : (g30Advanced ? "31–60 天价值验证" : "0–30 天 Launch"));
     var nextGate = !g30Advanced ? "Day 30 Launch Gate" : (!g60Advanced ? "Day 60 Value Gate" : (!g90Advanced ? "Day 90 Scale Review" : "下一轮 Scale Decision"));
 
-    return '<section class="scale-ops-cockpit"><div class="scale-ops-head"><div><span>SCALE OPERATIONS COCKPIT</span><h2>' + esc(plan.target) + ' · ' + esc(stage) + '</h2><p>把计划、风险、Gate、Owner 承诺和第二批启动收在一个运营视图里.</p></div><div><span>NEXT GATE</span><strong>' + esc(nextGate) + '</strong></div></div>' +
-      '<div class="scale-ops-metrics"><div><span>总执行</span><strong>' + overall.pct + '%</strong><small>' + overall.done + '/' + overall.total + '</small></div><div><span>计划偏差</span><strong>' + (variance.delta>0?"+":"") + variance.delta + '%</strong><small>' + (variance.status==="behind"?"落后计划":(variance.status==="ahead"?"领先计划":"基本按计划")) + '</small></div><div><span>风险 / 延期</span><strong>' + risks.length + '</strong><small>需要恢复动作</small></div><div><span>恢复承诺</span><strong>' + recoveryCommitted + '/' + recoveryTotal + '</strong><small>Owner 已确认</small></div><div><span>第二批启动</span><strong>' + wave.started + '/' + wave.total + '</strong><small>医院 + 代表</small></div></div>' +
+    return '<section class="scale-ops-cockpit"><div class="scale-ops-head"><div><span>SCALE OPERATIONS COCKPIT</span><h2>' + esc(plan.target) + ' · ' + esc(stage) + '</h2><p>把计划、风险、Gate、Owner 承诺、第二批爬坡和业务证据收在一个运营视图里.</p></div><div><span>NEXT GATE</span><strong>' + esc(nextGate) + '</strong></div></div>' +
+      '<div class="scale-ops-metrics"><div><span>总执行</span><strong>' + overall.pct + '%</strong><small>' + overall.done + '/' + overall.total + '</small></div><div><span>计划偏差</span><strong>' + (variance.delta>0?"+":"") + variance.delta + '%</strong><small>' + (variance.status==="behind"?"落后计划":(variance.status==="ahead"?"领先计划":"基本按计划")) + '</small></div><div><span>风险 / 延期</span><strong>' + risks.length + '</strong><small>需要恢复动作</small></div><div><span>恢复承诺</span><strong>' + recoveryCommitted + '/' + recoveryTotal + '</strong><small>Owner 已确认</small></div><div><span>第二批启动</span><strong>' + wave.started + '/' + wave.total + '</strong><small>医院 + 代表</small></div><div><span>第二批爬坡</span><strong>' + ramp.pct + '%</strong><small>' + ramp.productive + ' 个稳定运行</small></div><div><span>Value Proof</span><strong>' + valueProof.requiredDone + '/' + valueProof.requiredTotal + '</strong><small>Day 60 必选证据</small></div></div>' +
       '<div class="scale-ops-flow"><div class="' + (g30Advanced?"done":"active") + '"><span>01</span><strong>Launch</strong><small>' + (g30?esc(g30.label):"进行中") + '</small></div><em>→</em><div class="' + (g60Advanced?"done":(g30Advanced?"active":"")) + '"><span>02</span><strong>Value</strong><small>' + (g60?esc(g60.label):(g30Advanced?"进行中":"待解锁")) + '</small></div><em>→</em><div class="' + (g90Advanced?"done":(g60Advanced?"active":"")) + '"><span>03</span><strong>Repeatability</strong><small>' + (g90?esc(g90.label):(g60Advanced?"进行中":"待解锁")) + '</small></div></div>' +
     '</section>';
   }
@@ -3375,8 +3554,10 @@
       '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>01</span><div><h2>30 / 60 / 90 天执行路线</h2><p>阶段目标固定, 任务完成状态保存在当前浏览器.</p></div></div><div class="scale-phase-tabs">' + phaseTabs + '</div><div class="scale-phase-body"><div class="scale-phase-header"><div><span>' + esc(phase.gate) + '</span><h3>' + esc(phase.title) + '</h3><p>' + esc(phase.objective) + '</p></div><div><strong>' + phaseProgress.pct + '%</strong><span>' + phaseProgress.done + '/' + phaseProgress.total + '</span></div></div><div class="scale-plan-task-list">' + tasks + '</div><div class="scale-phase-success"><span>PHASE SUCCESS</span><strong>' + esc(phase.success) + '</strong></div></div></section>' +
       '<section class="scale-plan-grid"><div class="scale-plan-section"><div class="scale-plan-section-title"><span>02</span><div><h2>首批目标医院</h2><p>先复制最相似场景, 不做全面铺开.</p></div></div><div class="scale-plan-hospitals">' + hospitals + '</div></div><div class="scale-plan-section"><div class="scale-plan-section-title"><span>03</span><div><h2>首批代表</h2><p>上线前先建立能力基线和训练重点.</p></div></div><div class="scale-plan-reps">' + reps + '</div></div></section>' +
       renderSecondWave(plan) +
-      '<section class="scale-plan-grid"><div class="scale-plan-section"><div class="scale-plan-section-title"><span>04</span><div><h2>Agent 复制顺序</h2><p>先复制行动闭环, 再复制管理与学习能力.</p></div></div><div class="scale-plan-agents">' + agents + '</div></div><div class="scale-plan-section"><div class="scale-plan-section-title"><span>05</span><div><h2>数据准备清单</h2><p>数据不齐时不强行复制模型.</p></div></div><div class="scale-data-list">' + dataItems + '</div></div></section>' +
-      '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>06</span><div><h2>Management Gates</h2><p>Day 30 / 60 / 90 必须由经理显式做“暂缓 / 有条件通过 / 通过”判断.</p></div></div>' + renderScaleGateReviews(plan) + '</section>' +
+      renderSecondWaveRamp(plan) +
+      renderScaleEvidenceRoom(plan) +
+      '<section class="scale-plan-grid"><div class="scale-plan-section"><div class="scale-plan-section-title"><span>06</span><div><h2>Agent 复制顺序</h2><p>先复制行动闭环, 再复制管理与学习能力.</p></div></div><div class="scale-plan-agents">' + agents + '</div></div><div class="scale-plan-section"><div class="scale-plan-section-title"><span>07</span><div><h2>数据准备清单</h2><p>数据不齐时不强行复制模型.</p></div></div><div class="scale-data-list">' + dataItems + '</div></div></section>' +
+      '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>08</span><div><h2>Management Gates</h2><p>Day 30 / 60 / 90 必须由经理显式做“暂缓 / 有条件通过 / 通过”判断, 且 Value / Repeatability Gate 必须有证据.</p></div></div>' + renderScaleGateReviews(plan) + '</section>' +
       renderGateReviewOperations(plan) +
       '<footer class="scale-plan-footer"><div><span>SCALE PRINCIPLE</span><strong>复制的是可验证的行动与管理闭环, 不是把软件菜单搬到另一个区域.</strong></div><div><span>PLAN ID</span><strong>' + esc(plan.id) + '</strong></div></footer>' +
     '</div>';
@@ -3415,6 +3596,9 @@
       state.scaleRecoveryPlans = {};
       state.scaleOwnerCommitments = {};
       state.scaleSecondWaveLaunch = { hospitals:{}, reps:{}, startedAt:null };
+    state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
+    state.scaleValueEvidence = {};
+    state.scaleRepeatabilityEvidence = {};
       state.scaleExecutionDay = 18;
     } else {
       state.scaleExecutionPlan = createScaleExecutionPlan(snapshot);
@@ -3427,6 +3611,9 @@
       state.scaleRecoveryPlans = {};
       state.scaleOwnerCommitments = {};
       state.scaleSecondWaveLaunch = { hospitals:{}, reps:{}, startedAt:null };
+    state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
+    state.scaleValueEvidence = {};
+    state.scaleRepeatabilityEvidence = {};
     }
     saveState();
     render();
@@ -4224,6 +4411,18 @@
     $$("[data-second-wave-id]").forEach(function (el) {
       el.addEventListener("click", function () {
         toggleSecondWaveLaunch(el.getAttribute("data-second-wave-type"), el.getAttribute("data-second-wave-id"));
+      });
+    });
+
+    $$("[data-second-wave-ramp]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        advanceSecondWaveRamp(el.getAttribute("data-second-wave-ramp"), el.getAttribute("data-second-wave-ramp-id"));
+      });
+    });
+
+    $$("[data-scale-evidence]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        toggleScaleEvidence(el.getAttribute("data-scale-evidence"), el.getAttribute("data-scale-evidence-id"));
       });
     });
 
