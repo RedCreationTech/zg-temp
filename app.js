@@ -1751,11 +1751,11 @@
       });
     });
 
-    $("[data-doctor-live]").forEach(function (el) {
+    $$("[data-doctor-live]").forEach(function (el) {
       el.addEventListener("click", startLiveVisitForDoctor);
     });
 
-    $("[data-rep-start-visit]").forEach(function (el) {
+    $$("[data-rep-start-visit]").forEach(function (el) {
       el.addEventListener("click", function () {
         var session = liveVisitSession();
         if (session) { session.started = true; session.startedAt = new Date().toISOString(); }
