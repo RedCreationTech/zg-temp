@@ -1043,6 +1043,194 @@ National Rollout Control Tower
 
 以上仍然全部为浏览器端演示状态, 不连接真实生产系统.
 
+## 本轮 Control Tower Batch 3: Root Cause / Decision Replay / Recovery Sequence
+
+National Rollout Control Tower 继续从“看见异常”推进到“解释为什么发生，以及按什么顺序恢复”。
+
+### Root Cause Workbench
+
+Exception Center 每条异常新增：
+
+```text
+根因
+```
+
+点击以后，Control Tower 会自动生成：
+
+```text
+Context
+→ Decision
+→ Missed Closure
+→ Current Impact
+```
+
+不同异常使用不同根因模型。
+
+例如 Wave 容量超限：
+
+```text
+当前总部情景容量
+→ 当前 Wave 区域 / 节奏安排
+→ Budget / Parallel Gate 未闭环
+→ 全国并行 Rollout 出现资源挤兑
+```
+
+90 天执行风险：
+
+```text
+正式扩区已进入 90 天执行
+→ 当前计划继续推进
+→ 某任务延期 / 风险未关闭
+→ Value / Repeatability Evidence 可能后移
+```
+
+Value Gate：
+
+```text
+Day 30 Launch Gate 已通过
+→ 进入 Value 验证
+→ NBA / Action / Outcome 必选证据未齐
+→ 无法证明 Action 真正改变客户行为
+```
+
+Portfolio Pace：
+
+```text
+正式 Scale 已经存在
+→ 总部组合层标记“暂停”
+→ 正式 Management Gate 未同步 Hold
+→ Portfolio 与正式执行出现状态不一致
+```
+
+### Decision Replay
+
+Root Cause Workbench 会从 HQ Decision Log 中筛选与当前异常最相关的历史动作，并按时间顺序回放：
+
+- Wave 调整
+- 区域 Pace
+- Shared Resource
+- Scale Decision
+- What-if
+- Portfolio Review
+- Alert Action
+- Management Action
+
+点击某条 Replay 记录以后，会联动到现有：
+
+```text
+Decision Impact Trace
+```
+
+继续查看该决策当前影响的 Region / Wave / Resource / Gate / Evidence。
+
+### Recovery Sequence
+
+每类异常会生成有顺序的恢复步骤。
+
+例如 Wave Capacity：
+
+```text
+01 确认超限来自预算还是并行
+02 保护正式扩区，调整候选区域
+03 重新计算 Wave / Shared Resource Capacity
+04 刷新 Portfolio Executive Review
+```
+
+Value Gate：
+
+```text
+01 验证 NBA 采纳
+02 验证 Action 完成
+03 验证正向 Outcome
+04 重新进行 Day 60 Value Gate
+```
+
+Recovery Sequence 支持人工勾选进度。
+
+但这里有一个重要约束：
+
+```text
+恢复步骤全部勾选
+≠
+异常关闭
+```
+
+### Closing Evidence
+
+每个根因工作台都会额外显示真正的 Closing Evidence。
+
+例如：
+
+- Wave 资源与并行数重新回到容量内
+- Shared Resource 使用量 ≤ Capacity
+- 90 天风险清零且计划不再落后
+- Recovery Plan 全部 Owner Commitment
+- Value Evidence 必选项全部验证
+- Repeatability Evidence 必选项全部验证
+- 正式扩区不再处于 Portfolio 暂停
+- Portfolio Executive Review 与当前状态一致
+- Wave 1 候选 Data Readiness ≥80%
+
+只有这些底层条件真实满足以后，Control Tower 的异常重算才会真正退出。
+
+因此：
+
+```text
+勾选恢复动作
+→ 表示执行进度
+
+底层 Closing Evidence 达标
+→ 才表示问题真的恢复
+```
+
+### Review Staleness 增强
+
+季度 Portfolio Executive Review 现在不仅在情景切换后判定过期。
+
+只要 Review 生成以后又发生新的：
+
+- Wave 调整
+- Pace 调整
+- Shared Resource
+- Champion Pattern
+- Candidate
+- What-if
+- 其它 HQ Rollout Decision
+
+Control Tower 都会识别：
+
+```text
+季度 Executive Review 已过期
+```
+
+要求重新刷新固定快照。
+
+### 当前 Root Cause 管理链
+
+```text
+P1 / P2 Exception
+↓
+Root Cause Workbench
+↓
+Context
+↓
+Decision Replay
+↓
+Missed Closure
+↓
+Current Impact
+↓
+Recovery Sequence
+↓
+Closing Evidence
+↓
+底层状态恢复
+↓
+Exception 自动退出
+```
+
+以上仍然全部使用浏览器前端状态与脱敏 Demo 数据，不连接真实生产后台。
+
 ## 本轮 Control Tower Decision Impact / Action-Outcome 穿透增强
 
 National Rollout Control Tower 继续从“发现全国异常”推进到“追到具体影响与业务证据”。
