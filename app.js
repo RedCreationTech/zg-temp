@@ -91,6 +91,7 @@
     outcomes: [],
     serverActions: [],
     ruleValidations: [],
+    prepStatus: saved.prepStatus || {},
     demoScenario: saved.demoScenario || "hospital_attack",
     demoTourActive: false,
     demoTourStep: 0
@@ -109,6 +110,7 @@
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
+      prepStatus: state.prepStatus,
       demoScenario: state.demoScenario
     }));
   }
@@ -443,11 +445,12 @@
         ) +
         panel("Top 1–3 业务杠杆点", "AI 已按影响、可改变、紧迫度与资源匹配排序", '<div class="lever-list">' + levers + '</div>') +
       '</div>' +
+      '<div class="mt-16">' + renderPatientFlow(h) + '</div>' +
       '<div class="grid-equal mt-16">' +
         panel("医院 NBA", "谁负责、何时切入、做什么、为什么做、成功信号", nba) +
         panel("作战闭环", "目标: " + h.target, timeline) +
       '</div>' +
-      '<div class="mt-16">' + renderHospitalEcology(h) + '</div>';
+      '<div class="grid-equal mt-16"><div>' + renderHospitalEcology(h) + '</div><div>' + renderResourcePlan(h) + '</div></div>';
   }
 
   function renderDoctor() {
@@ -474,6 +477,7 @@
             '<div class="profile-head"><div class="profile-name"><h2>' + esc(doc.focus) + '</h2><p>当前态度: ' + esc(doc.support) + ' · 阶段: ' + esc(doc.stage) + '</p><div class="profile-tags">' + tags + '</div></div><button class="btn soft" data-ai-generate="doctor">AI 生成拜访 NBA</button></div>' +
             '<div class="signal-grid"><div class="signal-card"><b>关键触发场景</b><strong>NOW</strong><span>' + esc(doc.trigger) + '</span></div><div class="signal-card"><b>当前 GAP</b><strong>1 个</strong><span>' + esc(doc.gap) + '</span></div><div class="signal-card"><b>目标行为</b><strong>推进</strong><span>' + esc(doc.targetBehavior) + '</span></div>'
           ) +
+          '<div class="mt-16">' + renderPreVisitWorkspace(doc) + '</div>' +
           '<div class="grid-equal">' +
             panel("下一次拜访脚本", "围绕 WHY → WHEN → WHAT → HOW → NEXT", '<div class="script-box"><span class="label">AI RECOMMENDED TALK TRACK</span>' + script + '</div>') +
             panel("核心证据包", "来源可追溯, 医学审核通过", '<div class="evidence-list">' + evidence + '</div><button class="btn primary full mt-12" data-custom-action="visit-start">开始拜访演示</button>') +
@@ -667,23 +671,110 @@
       '</div>';
   }
 
+  function renderPatientFlow(h) {
+    var flow = (h.patientFlow || []).map(function (step, i) {
+      var width = Math.max(10, Number(step.rate || 0));
+      var cls = step.status === "risk" ? "risk" : (step.status === "watch" ? "watch" : "stable");
+      return '<button class="patient-flow-step ' + cls + '" data-patient-flow="' + i + '">' +
+        '<div class="patient-flow-head"><span>' + esc(step.stage) + '</span><strong>' + esc(step.volume) + '</strong></div>' +
+        '<div class="patient-flow-bar"><i style="width:' + width + '%"></i></div>' +
+        '<div class="patient-flow-foot"><b>' + esc(step.rate) + '%</b><span>' + esc(step.note) + '</span></div>' +
+      '</button>';
+    }).join('<div class="patient-flow-arrow">→</div>');
+
+    return panel("患者流与关键流失点", "从目标患者到持续管理, 直接定位最值得改变的环节",
+      '<div class="patient-flow">' + flow + '</div>' +
+      '<div class="flow-diagnosis"><span>AI 判断</span><strong>' + esc(h.levers[0].title) + '</strong><p>' + esc(h.levers[0].why) + '</p><button class="btn soft" data-ai-generate="hospital">基于流失点重新生成 NBA</button></div>'
+    );
+  }
+
+  function renderResourcePlan(h) {
+    var rows = (h.resources || []).map(function (r, i) {
+      var statusClass = r.status === "ready" ? "done" : (r.status === "doing" ? "doing" : (r.status === "hold" ? "risk" : "todo"));
+      var statusText = { ready: "已就绪", doing: "执行中", planned: "计划中", hold: "暂缓" }[r.status] || r.status;
+      return '<tr data-resource-row="' + i + '"><td><span class="resource-type">' + esc(r.type) + '</span></td><td><b>' + esc(r.item) + '</b></td><td>' + esc(r.owner) + '</td><td>' + esc(r.timing) + '</td><td><span class="soft-chip">' + esc(r.lever) + '</span></td><td><button class="status ' + statusClass + '" data-resource-toggle="' + i + '">' + esc(statusText) + '</button></td></tr>';
+    }).join("");
+
+    return panel("资源配置计划", "每一份资源都必须映射到具体杠杆点, 而不是平均铺开",
+      '<table class="risk-table resource-table"><thead><tr><th>资源</th><th>动作</th><th>Owner</th><th>时间</th><th>对应杠杆</th><th>状态</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="resource-summary"><div><span>本周资源策略</span><strong>' + (h.id === "h3" ? "先买信息, 暂缓重投入" : "聚焦 Top 1-2 杠杆, 资源不平均分配") + '</strong></div><button class="btn primary" data-resource-review>生成经理 Review</button></div>'
+    );
+  }
+
+  function openPatientFlowDetail(index) {
+    var h = data.hospitals.find(function (x) { return x.id === state.selectedHospital; }) || data.hospitals[0];
+    var step = h.patientFlow && h.patientFlow[index];
+    if (!step) return;
+    var next = h.patientFlow[index + 1];
+    var loss = next ? Math.max(0, Number(step.volume) - Number(next.volume)) : 0;
+    var body =
+      '<div class="drawer-section"><h4>患者旅程节点</h4><div class="drawer-callout"><strong>' + esc(step.stage) + ' · ' + esc(step.volume) + '</strong><p>' + esc(step.note) + '</p></div></div>' +
+      '<div class="drawer-section"><h4>流失判断</h4><div class="drawer-meta"><div class="meta-cell"><b>当前转化</b><span>' + esc(step.rate) + '%</span></div><div class="meta-cell"><b>下一节点流失</b><span>' + esc(loss) + ' 人</span></div></div></div>' +
+      '<div class="drawer-section"><h4>下一步该做什么</h4><div class="drawer-success"><span>→</span><span>' + esc(index <= 1 ? h.levers[1].what : h.levers[0].what) + '</span></div></div>';
+    openDrawer(step.stage, body, null);
+  }
+
+  function openStakeholderDetail(index) {
+    var h = data.hospitals.find(function (x) { return x.id === state.selectedHospital; }) || data.hospitals[0];
+    var s = h.stakeholders && h.stakeholders[index];
+    if (!s) return;
+    var body =
+      '<div class="drawer-section"><h4>关键关系人</h4><div class="drawer-callout"><strong>' + esc(s.name) + ' · ' + esc(s.role) + '</strong><p>当前关系状态: ' + esc(s.relation) + '</p></div></div>' +
+      '<div class="drawer-section"><h4>影响与支持</h4><div class="drawer-meta"><div class="meta-cell"><b>影响力</b><span>' + esc(s.influence) + ' / 100</span></div><div class="meta-cell"><b>支持度</b><span>' + esc(s.support) + ' / 100</span></div></div></div>' +
+      '<div class="drawer-section"><h4>推荐动作</h4><div class="drawer-success"><span>→</span><span>' + esc(s.action) + '</span></div></div>';
+    openDrawer(s.name, body, null);
+  }
+
   function renderHospitalEcology(h) {
-    var name = esc(h.name);
+    var positions = [
+      { left: 26, top: 24 },
+      { left: 75, top: 24 },
+      { left: 80, top: 70 },
+      { left: 22, top: 72 },
+      { left: 50, top: 16 }
+    ];
+    var centerX = 50, centerY = 50;
+    var lines = "";
+    var nodes = (h.stakeholders || []).map(function (s, i) {
+      var p = positions[i] || { left: 50 + ((i % 2) ? 25 : -25), top: 20 + (i * 13) % 60 };
+      var dx = p.left - centerX;
+      var dy = p.top - centerY;
+      var len = Math.sqrt(dx * dx + dy * dy);
+      var angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      lines += '<div class="eco-line" style="left:' + centerX + '%;top:' + centerY + '%;width:' + len + '%;transform:rotate(' + angle + 'deg)"></div>';
+      var cls = s.influence >= 85 ? "key" : "";
+      return '<button class="eco-node ' + cls + '" style="left:' + p.left + '%;top:' + p.top + '%" data-stakeholder="' + i + '"><strong>' + esc(s.name) + '</strong><span>' + esc(s.role) + '</span><small>影响 ' + esc(s.influence) + ' · 支持 ' + esc(s.support) + '</small></button>';
+    }).join("");
+
     var map =
       '<div class="ecology-map">' +
-        '<div class="eco-line" style="left:50%;top:50%;width:27%;transform:rotate(-32deg)"></div>' +
-        '<div class="eco-line" style="left:28%;top:28%;width:28%;transform:rotate(46deg)"></div>' +
-        '<div class="eco-line" style="left:50%;top:50%;width:28%;transform:rotate(28deg)"></div>' +
-        '<div class="eco-line" style="left:50%;top:50%;width:31%;transform:rotate(151deg)"></div>' +
-        '<div class="eco-line" style="left:50%;top:50%;width:25%;transform:rotate(206deg)"></div>' +
-        '<button class="eco-node primary" style="left:50%;top:50%"><strong>' + name + '</strong><span>' + esc(h.department) + '</span><small>当前作战中心</small></button>' +
-        '<button class="eco-node key" style="left:28%;top:27%"><strong>周主任</strong><span>科室决策者</span><small>影响力 94</small></button>' +
-        '<button class="eco-node key" style="left:75%;top:27%"><strong>治疗组</strong><span>4 位核心医生</span><small>关键执行层</small></button>' +
-        '<button class="eco-node" style="left:78%;top:70%"><strong>医学部</strong><span>证据支持</span><small>资源方</small></button>' +
-        '<button class="eco-node" style="left:23%;top:72%"><strong>准入 / 药学</strong><span>流程影响者</span><small>协同角色</small></button>' +
+        lines +
+        '<button class="eco-node primary" style="left:50%;top:50%"><strong>' + esc(h.name) + '</strong><span>' + esc(h.department) + '</span><small>当前作战中心</small></button>' +
+        nodes +
       '</div>' +
-      '<div class="eco-legend"><span><i class="a"></i>作战中心</span><span><i class="b"></i>关键影响者</span><span><i class="c"></i>协同角色</span><span>点击节点查看关系和建议动作</span></div>';
-    return panel("医院生态关系图", "从“名单”升级为决策链、影响关系与资源协同图", map);
+      '<div class="eco-legend"><span><i class="a"></i>作战中心</span><span><i class="b"></i>高影响角色</span><span><i class="c"></i>协同角色</span><span>点击节点查看关系、支持度和推荐动作</span></div>';
+    return panel("医院生态关系图", "不只看名单, 还要看影响力、支持度和下一步动作", map);
+  }
+
+  function renderPreVisitWorkspace(doc) {
+    var p = doc.preVisit || {};
+    var checklist = (p.checklist || []).map(function (item, i) {
+      var checked = state.prepStatus && state.prepStatus[doc.id] && state.prepStatus[doc.id][i];
+      return '<button class="prep-check ' + (checked ? 'done' : '') + '" data-prep-check="' + i + '"><span class="prep-box">' + (checked ? '✓' : '') + '</span><span>' + esc(item) + '</span></button>';
+    }).join("");
+    var questions = (p.questions || []).map(function (q) { return '<li>' + esc(q) + '</li>'; }).join("");
+    var objections = (p.objections || []).map(function (q) { return '<li>' + esc(q) + '</li>'; }).join("");
+
+    return panel("拜访前准备工作台", "5 分钟把“资料很多”收敛成这一次拜访唯一目标",
+      '<div class="previsit-hero"><div><span>THIS VISIT OBJECTIVE</span><strong>' + esc(p.objective || doc.targetBehavior) + '</strong></div><button class="btn primary" data-ai-generate="doctor">AI 检查准备质量</button></div>' +
+      '<div class="previsit-grid">' +
+        '<div class="previsit-card"><span>开场策略</span><p>' + esc(p.opening || "") + '</p></div>' +
+        '<div class="previsit-card"><span>结束承诺</span><p>' + esc(p.commitment || "") + '</p></div>' +
+        '<div class="previsit-card list"><span>优先探询</span><ol>' + questions + '</ol></div>' +
+        '<div class="previsit-card list"><span>预判异议</span><ol>' + objections + '</ol></div>' +
+      '</div>' +
+      '<div class="prep-checklist"><div class="flex-between"><strong>拜访前检查清单</strong><span class="small-note">点击模拟完成准备</span></div><div class="prep-check-grid">' + checklist + '</div></div>'
+    );
   }
 
   function renderDoctorJourney(doc) {
@@ -1120,7 +1211,50 @@
       el.addEventListener("click", function () { navigate(el.getAttribute("data-route-jump")); });
     });
 
-    $$("[data-evidence-index]").forEach(function (el) {
+    $("[data-patient-flow]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        openPatientFlowDetail(Number(el.getAttribute("data-patient-flow")));
+      });
+    });
+
+    $("[data-stakeholder]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        openStakeholderDetail(Number(el.getAttribute("data-stakeholder")));
+      });
+    });
+
+    $("[data-resource-toggle]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var i = Number(el.getAttribute("data-resource-toggle"));
+        var h = data.hospitals.find(function (x) { return x.id === state.selectedHospital; }) || data.hospitals[0];
+        var r = h.resources && h.resources[i];
+        if (!r) return;
+        var order = ["planned","ready","doing"];
+        var idx = order.indexOf(r.status);
+        r.status = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : (r.status === "hold" ? "planned" : "ready");
+        showToast(r.item + " · " + ({ ready: "已就绪", doing: "执行中", planned: "计划中" }[r.status] || r.status));
+        render();
+      });
+    });
+
+    $("[data-resource-review]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        startAIGeneration("hospital");
+      });
+    });
+
+    $("[data-prep-check]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var i = Number(el.getAttribute("data-prep-check"));
+        var docId = state.selectedDoctor;
+        if (!state.prepStatus[docId]) state.prepStatus[docId] = {};
+        state.prepStatus[docId][i] = !state.prepStatus[docId][i];
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-evidence-index]").forEach(function (el) {
       el.addEventListener("click", function () {
         openEvidenceTrace(Number(el.getAttribute("data-evidence-index")));
       });
