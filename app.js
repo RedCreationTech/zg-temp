@@ -4300,7 +4300,7 @@
         title:r.name + " 准备度不足但已排入 Wave 1",
         detail:"Data Readiness " + r.data + "%. 进入当前季度准备可能挤占共享资源.",
         owner:"区域准备 Owner",
-        source:"Wave Planning",
+        source:"Wave Readiness",
         action:"后移 Wave 或先补数据"
       });
     });
