@@ -323,3 +323,7 @@
   .brief-hospital,.brief-decision,.brief-outcome,.brief-risk,.brief-next-item{padding:7px}
   @page{size:A4 landscape;margin:8mm}
 }
+
+
+.review-close-actions{display:flex;align-items:center;gap:8px}
+@media(max-width:700px){.review-close-actions{width:100%;flex-direction:column}.review-close-actions .btn{width:100%}}
