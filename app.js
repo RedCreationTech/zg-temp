@@ -4305,16 +4305,27 @@
       });
     });
 
-    if (state.scalePortfolioReview && state.scalePortfolioReview.scenarioKey !== state.scalePortfolioScenario) {
-      alerts.push({
-        id:"review-stale",
-        severity:"low",
-        title:"季度 Executive Review 已过期",
-        detail:"当前情景已从 " + esc(state.scalePortfolioReview.scenario || "-") + " 切换, Review 快照仍是旧情景.",
-        owner:"销售总监",
-        source:"Portfolio Review",
-        action:"刷新季度 Review"
-      });
+    if (state.scalePortfolioReview) {
+      var reviewAt=Date.parse(state.scalePortfolioReview.generatedAt || 0);
+      var newestDecisionAt=(state.rolloutDecisionLog || []).reduce(function(max,item){
+        var t=Date.parse(item.at || 0);
+        return Math.max(max,isNaN(t)?0:t);
+      },0);
+      var scenarioChanged=state.scalePortfolioReview.scenarioKey !== state.scalePortfolioScenario;
+      var reviewOutdated=newestDecisionAt > reviewAt;
+      if (scenarioChanged || reviewOutdated) {
+        alerts.push({
+          id:"review-stale",
+          severity:"low",
+          title:"季度 Executive Review 已过期",
+          detail:scenarioChanged
+            ? "Portfolio 情景已经变化, Review 快照仍是 " + esc(state.scalePortfolioReview.scenario || "-") + " 情景."
+            : "Review 生成后又发生了新的 Wave / Pace / Resource / Pattern / What-if 管理动作.",
+          owner:"销售总监",
+          source:"Portfolio Review",
+          action:"刷新季度 Review"
+        });
+      }
     }
 
     return alerts;
@@ -4873,7 +4884,7 @@
   function rolloutAlertRoute(alert) {
     if (!alert) return "controltower";
     if (alert.source==="90-Day Execution" || alert.source==="Recovery Plan" || alert.source==="Value Gate" || alert.source==="Scale Review") return "scaleplan";
-    if (alert.source==="Wave Planning" || alert.source==="Shared Resource" || alert.source==="Portfolio Pace" || alert.source==="Portfolio Review") return "portfolio";
+    if (alert.source==="Wave Planning" || alert.source==="Shared Resource" || alert.source==="Portfolio Pace" || alert.source==="Portfolio Review" || alert.source==="Wave Readiness") return "portfolio";
     return "controltower";
   }
 
