@@ -365,7 +365,7 @@
       var nba = (state.recentNBAs || []).find(function (n) { return n.decisionId === d.id; });
       return '<tr><td><span class="status todo">' + esc(d.decisionType) + '</span></td><td><b>' + esc(d.priorityScore) + '</b></td><td>' + esc(d.rationale) + '</td><td>' + esc((d.ruleIds || []).join(", ") || "-") + '</td><td>' + (nba ? esc(nba.what) : "-") + '</td></tr>';
     }).join("");
-    if (!decisionRows) decisionRows = '<tr><td colspan="5" class="muted">还没有服务端 Decision Trace. 从 Hospital / Doctor / Coaching Agent 生成一次 NBA 即可产生.</td></tr>';
+    if (!decisionRows) decisionRows = '<tr><td colspan="5" class="muted">还没有 Decision Trace. 从 Hospital / Doctor / Coaching Agent 生成一次 NBA 即可产生.</td></tr>';
 
     var outcomeRows = (state.outcomes || []).slice(0, 8).map(function (o) {
       return '<tr><td><b>' + esc(o.result) + '</b></td><td>' + esc(o.signal) + '</td><td>' + esc(o.effectiveness) + '</td><td>' + esc(o.recordedBy || "-") + '</td></tr>';
@@ -385,7 +385,7 @@
 
     return '<div class="page-banner"><div><span class="banner-kicker">LEARNING ENGINE</span><h2>把冠军打法从个人经验变成组织资产</h2><p>每一个有效或无效的下一步行动, 都回流为 Context → Decision → NBA → Action → Outcome 证据, 持续更新 Decision Rules.</p></div><div class="banner-side"><strong>' + validated + '/' + allRules.length + '</strong><span>当前规则已验证</span></div></div>' +
       '<div class="learning-summary">' +
-        metric("Decision Trace", String(decisionCount), "服务端已保存的结构化判断", "", "D") +
+        metric("Decision Trace", String(decisionCount), "浏览器内模拟的结构化判断", "", "D") +
         metric("Outcome", String(outcomeCount), "真实业务信号回流", outcomeCount ? "+" + outcomeCount : "", "O") +
         metric("验证中 Rule", String(testing), "等待更多 Outcome 证据", "", "测") +
         metric("Rule 调用", String(totalUses), "进入 Decision Pipeline 的累计次数", "+" + totalUses, "R") +
@@ -525,7 +525,7 @@
     var body =
       '<div class="ai-stream"><div class="ai-stream-head"><strong>Decision Engine 正在生成</strong><span class="stream-status"><i class="stream-dot"></i>Streaming</span></div><p id="streamText"></p><div class="ai-stream-actions"><button class="btn ghost" id="recordGeneratedOutcome" style="display:none">记录 Outcome</button><button class="btn primary" id="adoptGenerated" disabled>采纳为下一步行动</button></div></div>' +
       '<div id="decisionTraceSlot"></div>' +
-      '<div class="drawer-section mt-16"><h4>生成依据</h4><p class="small-note">Context Builder → Decision Rules → Decision → NBA. Pilot Server 模式会保存完整 Decision Trace, Browser Mock 模式自动回退.</p></div>';
+      '<div class="drawer-section mt-16"><h4>生成依据</h4><p class="small-note">Context Builder → Decision Rules → Decision → NBA. 前端原型会在浏览器内保存完整 Decision Trace 与交互状态, 不依赖后端服务.</p></div>';
     openDrawer(titleMap[type] || "AI 生成", body, null);
     var target = $("#streamText");
     var adopt = $("#adoptGenerated");
@@ -586,7 +586,7 @@
           saveState();
         }
         adopt.textContent = accepted && accepted.existing ? "Action 已存在" : "已创建 Action";
-        showToast(accepted && accepted.offline ? "离线模式: 已模拟 Action 创建" : "NBA 已采纳并生成正式 Action");
+        showToast("NBA 已采纳并生成原型 Action");
         var outcomeBtn = $("#recordGeneratedOutcome");
         if (outcomeBtn) outcomeBtn.style.display = "inline-flex";
       });
@@ -595,7 +595,7 @@
 
   function openOutcomeRecorder(nba, action) {
     if (!nba || !nba.id) {
-      showToast("当前是 Browser Mock 模式, 无服务端 NBA ID");
+      showToast("当前原型状态异常, 未生成 NBA ID");
       return;
     }
     var body =
@@ -623,7 +623,7 @@
         state.ruleValidations = result.ruleValidations.concat(state.ruleValidations || []);
       }
       closeDrawer();
-      showToast(result.offline ? "离线模式: Outcome 仅本地模拟" : "Outcome 已回流并生成 RuleValidation");
+      showToast("Outcome 已回流原型 Learning Engine");
       refreshDecisionData();
     });
   }
@@ -728,7 +728,7 @@
     var users = (org.users || []).map(function (u) {
       return '<tr><td><b>' + esc(u.name) + '</b></td><td>' + esc(u.role) + '</td><td>' + esc(u.region) + '</td><td><span class="status todo">' + esc(u.scope) + '</span></td></tr>';
     }).join("");
-    if (!users) users = '<tr><td colspan="4" class="muted">服务端组织数据尚未加载</td></tr>';
+    if (!users) users = '<tr><td colspan="4" class="muted">组织演示数据尚未加载</td></tr>';
 
     var roles = (org.roles || []).map(function (r) {
       var permissions = (r.permissions || []).map(function (p) { return '<span class="profile-tag">' + esc(p) + '</span>'; }).join("");
@@ -742,7 +742,7 @@
     }).join("");
     if (!auditRows) auditRows = '<tr><td colspan="5" class="muted">暂无服务端审计事件. 执行登录、NBA 生成、行动完成或 CRM 同步后会自动记录.</td></tr>';
 
-    var mode = state.runtimeOnline ? "Pilot Server" : "Browser Mock";
+    var mode = "Frontend Prototype";
     return '<div class="page-banner"><div><span class="banner-kicker">ORGANIZATION & ACCESS</span><h2>组织、辖区、角色与审计</h2><p>把 Agent 的“聪明”放进企业边界里. 用户只能访问自己职责范围内的医院、医生、行动和管理视图, 所有关键操作留下审计轨迹.</p></div><div class="banner-side"><strong>' + mode + '</strong><span>当前运行模式</span></div></div>' +
       '<div class="metric-grid">' + regions + '</div>' +
       '<div class="grid-equal">' +
@@ -764,11 +764,11 @@
   }
 
   async function loadRuntimeContext() {
-    var health = await window.ZG_API.health();
-    state.runtimeOnline = !!(health && health.ok && !health.offline);
+    await window.ZG_API.health();
+    state.runtimeOnline = false;
     var mode = $("#runtimeMode");
     if (mode) {
-      mode.innerHTML = '<span class="system-dot"></span>' + (state.runtimeOnline ? 'System of Action · Pilot Server' : 'System of Action · Browser Mock');
+      mode.innerHTML = '<span class="system-dot"></span>System of Action · Frontend Prototype';
     }
 
     var boot = await window.ZG_API.bootstrap();
@@ -917,7 +917,7 @@
         var action = el.getAttribute("data-review-action");
         el.disabled = true;
         var result = await window.ZG_API.reviewRuleValidation(id, action, state.session && state.session.name);
-        showToast(result.offline ? "离线模式: 已模拟 Rule Review" : (action === "approve" ? "RuleValidation 已批准" : "RuleValidation 已驳回"));
+        showToast(action === "approve" ? "RuleValidation 演示状态已批准" : "RuleValidation 演示状态已驳回");
         await refreshDecisionData();
       });
     });
@@ -942,7 +942,7 @@
       crmSync.textContent = "同步中...";
       var result = await window.ZG_API.syncCRM({ actor: state.session && state.session.name, records: 1286 });
       state.crmSync = result.crmSync || { status: "healthy", lastSyncedAt: new Date().toISOString(), records: 1286 };
-      showToast(result.offline ? "离线模式: 已模拟 CRM 同步" : "CRM / SFE 同步完成并写入审计");
+      showToast("CRM / SFE 同步演示完成");
       render();
     });
 
