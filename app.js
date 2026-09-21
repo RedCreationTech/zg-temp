@@ -3559,7 +3559,7 @@
     }).join("");
 
     return '<div class="scale-plan-page">' +
-      '<div class="scale-plan-toolbar"><button class="btn ghost" data-route-jump="pilot">返回 Scale Gate</button><div><button class="btn soft" data-scale-plan-regenerate>重新生成计划</button><button class="btn primary" data-scale-plan-executive>Executive Brief</button></div></div>' +
+      '<div class="scale-plan-toolbar"><button class="btn ghost" data-route-jump="pilot">返回 Scale Gate</button><div><button class="btn ghost" data-route-jump="portfolio">Scale Portfolio</button><button class="btn soft" data-scale-plan-regenerate>重新生成计划</button><button class="btn primary" data-scale-plan-executive>Executive Brief</button></div></div>' +
       '<header class="scale-plan-cover"><div><span>SCALE EXECUTION PLAN · 30 / 60 / 90 DAYS</span><h1>' + esc(plan.target) + ' · ' + esc(plan.scope) + '</h1><p>' + esc(plan.decisionLabel) + ' 已转化为可执行复制计划. 每个阶段必须通过管理 Gate, 不以“部署完成”代替业务验证.</p></div><div class="scale-plan-cover-meta"><strong>' + overall.pct + '%</strong><span>总执行进度</span><small>' + overall.done + '/' + overall.total + ' 项完成</small></div></header>' +
       renderScaleOperationsCockpit(plan) +
       '<section class="scale-plan-summary"><div><span>目标区域</span><strong>' + esc(plan.target) + '</strong><small>相似度 ' + plan.similarity + '%</small></div><div><span>首批医院</span><strong>' + plan.hospitals.length + '</strong><small>只复制高相似场景</small></div><div><span>首批代表</span><strong>' + plan.reps.length + '</strong><small>先做能力基线</small></div><div><span>复制 Agent</span><strong>' + plan.agents.length + '</strong><small>按阶段启用</small></div><div><span>模拟执行日</span><strong>Day ' + state.scaleExecutionDay + '</strong><small>计划 vs 实际动态计算</small></div></section>' +
@@ -3712,7 +3712,24 @@
   function advancePortfolioPattern(regionId) {
     if (regionId === "pilot-east1") return;
     if (!state.scalePortfolioPatternRollout) state.scalePortfolioPatternRollout = {};
-    var next = Math.min(3,portfolioPatternStep(regionId)+1);
+    var current = portfolioPatternStep(regionId);
+    var active = portfolioActiveTargetId();
+    if (regionId !== active && current >= 1) {
+      showToast("候选区域只能先完成场景匹配, 正式扩区后再做小样本复现");
+      return;
+    }
+    if (regionId === active && current >= 1) {
+      var g60 = state.scaleExecutionGateReviews.g60;
+      if (!(g60 && g60.status !== "hold")) {
+        showToast("进入 Day 60 Value Gate 之后, 才能继续 Champion Pattern 小样本验证");
+        return;
+      }
+    }
+    if (regionId === active && current >= 2 && !(state.scaleRepeatabilityEvidence || {}).champion) {
+      showToast("先在 Repeatability Evidence 中验证 Champion Pattern 跨场景复现");
+      return;
+    }
+    var next = Math.min(3,current+1);
     state.scalePortfolioPatternRollout[regionId] = next;
     saveState();
     render();
@@ -3891,9 +3908,9 @@
       state.scaleRecoveryPlans = {};
       state.scaleOwnerCommitments = {};
       state.scaleSecondWaveLaunch = { hospitals:{}, reps:{}, startedAt:null };
-    state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
-    state.scaleValueEvidence = {};
-    state.scaleRepeatabilityEvidence = {};
+      state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
+      state.scaleValueEvidence = {};
+      state.scaleRepeatabilityEvidence = {};
       state.scaleExecutionDay = 18;
     } else {
       state.scaleExecutionPlan = createScaleExecutionPlan(snapshot);
@@ -3957,7 +3974,7 @@
     var gate = scaleGateModel();
     var decision = state.scaleGateDecision;
     var meta = decision ? scaleDecisionMeta(decision.decision) : scaleDecisionMeta(gate.recommendation);
-    return '<section class="executive-scale-signal"><div><span>PILOT SCALE DECISION</span><h3>' + esc(decision ? decision.label : "等待正式 Scale Gate 决策") + '</h3><p>' + (decision ? "目标: " + esc(decision.target) + " · Gate " + decision.overall + "%" : "当前 AI 建议: " + esc(meta.label) + " · Gate " + gate.overall + "%") + '</p></div><div><strong>' + gate.passed + '/' + gate.total + '</strong><span>Gate 已通过</span></div><div class="executive-scale-actions no-print"><button class="btn ghost" data-enter-scale-gate>进入 Scale Gate</button>' + (state.scaleExecutionPlan ? '<button class="btn primary" data-open-scale-plan>查看 90 天执行计划</button>' : '') + '</div></section>';
+    return '<section class="executive-scale-signal"><div><span>PILOT SCALE DECISION</span><h3>' + esc(decision ? decision.label : "等待正式 Scale Gate 决策") + '</h3><p>' + (decision ? "目标: " + esc(decision.target) + " · Gate " + decision.overall + "%" : "当前 AI 建议: " + esc(meta.label) + " · Gate " + gate.overall + "%") + '</p></div><div><strong>' + gate.passed + '/' + gate.total + '</strong><span>Gate 已通过</span></div><div class="executive-scale-actions no-print"><button class="btn ghost" data-route-jump="portfolio">Scale Portfolio</button><button class="btn ghost" data-enter-scale-gate>进入 Scale Gate</button>' + (state.scaleExecutionPlan ? '<button class="btn primary" data-open-scale-plan>查看 90 天执行计划</button>' : '') + '</div></section>';
   }
 
   function renderPilot() {
