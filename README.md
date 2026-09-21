@@ -1043,6 +1043,138 @@ National Rollout Control Tower
 
 以上仍然全部为浏览器端演示状态, 不连接真实生产系统.
 
+## 本轮 Control Tower Decision Impact / Action-Outcome 穿透增强
+
+National Rollout Control Tower 继续从“发现全国异常”推进到“追到具体影响与业务证据”。
+
+### Decision Impact Trace
+
+总部决策日志中的记录现在可以点击选择。
+
+选中以后，Control Tower 会生成当前影响链，例如：
+
+```text
+Wave 调整
+→ Region
+→ Wave
+→ Capacity
+→ Scale Gate
+```
+
+或者：
+
+```text
+区域节奏暂停
+→ Region
+→ Pace
+→ Resource Budget
+→ Formal 90-Day Plan
+```
+
+对于 Scale Decision：
+
+```text
+Scale Decision
+→ Target Region
+→ Scale Gate
+→ 90-Day Execution
+```
+
+对于共享资源：
+
+```text
+Resource Reservation
+→ Region
+→ Shared Capacity
+→ Parallel Rollout
+```
+
+对于 Champion Pattern：
+
+```text
+Pattern Decision
+→ Region
+→ Pattern Stage
+→ Repeatability Evidence
+→ Decision Rule Candidate
+```
+
+Impact Trace 展示的是“当前状态下的影响关系”，而不是伪造未来结果。
+
+### Portfolio 操作统一进入 HQ Decision Log
+
+以下操作现在都会自动写入总部决策日志：
+
+- Wave 提前 / 延后
+- 区域加速 / 保持 / 暂停 / 延后
+- 共享资源预留 / 取消
+- Champion Pattern 复制推进
+- 下一次 Scale Gate 候选区域
+- Scale Decision
+- Portfolio Executive Review
+- What-if 草案 / 应用
+- 异常确认 / 升级 / 关闭
+
+日志记录使用区域和资源名称，而不只保存内部 ID，方便现场演示和管理 Review。
+
+### 异常直接进入处理页
+
+Exception Center 每条异常增加：
+
+```text
+处理
+```
+
+根据异常来源自动进入：
+
+```text
+Wave / Shared Resource / Portfolio Pace
+→ Scale Portfolio
+
+90-Day Risk / Recovery / Value Gate / Scale Review
+→ Scale Execution Plan
+```
+
+因此异常中心不再是“只读告警墙”。
+
+### Doctor → Action → Outcome 继续穿透
+
+Pilot 基准区的 Drill-down 现在可以进一步：
+
+```text
+全国
+→ 华东一区
+→ 医院
+→ 医生
+→ 选择 Action
+→ 查看 WHY / SUCCESS
+→ 打开 Action Drawer
+→ 查看 Visit Review / 现场承诺 / Outcome 回流
+```
+
+Outcome 信号优先使用：
+
+- 已结束拜访产生的现场承诺
+- 浏览器内已经记录的 Outcome
+- 当前真实 Demo Visit Review
+
+对于没有医生级真实演示数据的扩区医院，仍然保持“数据尚未接入”边界，不自动生成虚假 Action / Outcome。
+
+### 当前 Control Tower 闭环
+
+```text
+Exception
+→ Route to Owner Page
+→ Decision
+→ Decision Log
+→ Decision Impact Trace
+→ Drill-down
+→ Action
+→ Outcome
+```
+
+Control Tower 因此从全国级监控页面进一步变成可追责的 Rollout 管理入口。
+
 ## 本轮 Portfolio Wave Planning / Executive Review
 
 Scale Portfolio 现在不再只是区域组合监控, 而是进一步增加总部季度级 Rollout 编排.
