@@ -1467,6 +1467,68 @@
     }).join("") + '</div>';
   }
 
+  function briefDateLabel(iso) {
+    if (!iso) return "-";
+    try {
+      return new Date(iso).toLocaleString("zh-CN", { hour12:false });
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  function renderWeeklyDecisionBrief() {
+    var b = state.weeklyDecisionBrief;
+    if (!b) {
+      return '<div class="brief-empty"><div><span>WEEKLY DECISION BRIEF</span><h2>还没有生成周度决策摘要</h2><p>先完成周度 Review, 确认至少 3 个下周行动并关闭本周 Review.</p><button class="btn primary" data-review-route="managerreview">返回周度 Review</button></div></div>';
+    }
+
+    var changes = (b.changes || []).map(function(item,i){
+      return '<div class="brief-change"><span>0' + (i+1) + '</span><p>' + esc(item) + '</p></div>';
+    }).join("");
+    if (!changes) changes = '<div class="brief-muted">本周没有可用变化记录.</div>';
+
+    var hospitals = (b.hospitals || []).map(function(h){
+      var cls = h.progress >= 75 ? "good" : (h.progress >= 50 ? "mid" : "risk");
+      return '<div class="brief-hospital"><div class="brief-hospital-head"><div><strong>' + esc(h.name) + '</strong><span>' + esc(h.status) + '</span></div><b>' + h.progress + '%</b></div><div class="bar"><i style="width:' + h.progress + '%"></i></div><p><b>目标</b> ' + esc(h.target) + '</p><p><b>本周</b> ' + esc(h.outcome) + '</p><span class="brief-hospital-tag ' + cls + '">' + esc(h.lever) + '</span></div>';
+    }).join("");
+
+    var decisions = (b.decisions || []).map(function(d){
+      return '<div class="brief-decision"><div><span>' + esc(d.decision) + '</span><strong>' + esc(d.object) + '</strong></div><p>' + esc(d.why) + '</p><small>Action · ' + esc(d.action) + '</small></div>';
+    }).join("");
+    if (!decisions) decisions = '<div class="brief-muted">本周没有额外管理决策记录.</div>';
+
+    var outcomes = (b.outcomes || []).map(function(o){
+      return '<div class="brief-outcome"><span>' + esc(o.type) + '</span><strong>' + esc(o.title) + '</strong><p>' + esc(o.signal) + '</p><small>' + esc(o.evidence) + '</small></div>';
+    }).join("");
+
+    var risks = (b.risks || []).map(function(r){
+      return '<div class="brief-risk"><span class="' + (r.level === "高" ? "high" : "mid") + '">' + esc(r.level) + '</span><div><strong>' + esc(r.object) + ' · ' + esc(r.issue) + '</strong><p>' + esc(r.why) + '</p><small>Next · ' + esc(r.next) + '</small></div></div>';
+    }).join("");
+    if (!risks) risks = '<div class="brief-muted">当前没有高优先行为风险.</div>';
+
+    var next = (b.next || []).map(function(item,i){
+      return '<div class="brief-next-item"><span>' + (i+1) + '</span><div><strong>' + esc(item.title) + '</strong><p>' + esc(item.why) + '</p><small>Owner · ' + esc(item.owner) + ' · Success · ' + esc(item.success) + '</small></div></div>';
+    }).join("");
+
+    var champion = b.champion
+      ? '<div class="brief-champion"><span>CHAMPION PATTERN</span><strong>' + esc(b.champion.name) + '</strong><p>' + esc(b.champion.strength) + '</p><div><b>承诺率 ' + esc(b.champion.commitmentRate) + '%</b><b>NBA ' + esc(b.champion.nbaCompletion) + '%</b><b>' + (b.champion.adopted ? "已进入 Team Playbook" : "待团队验证") + '</b></div><small>' + esc(b.champion.next) + '</small></div>'
+      : '<div class="brief-muted">本周尚未形成 Champion Pattern.</div>';
+
+    return '<div class="brief-page">' +
+      '<div class="brief-toolbar no-print"><button class="btn ghost" data-review-route="managerreview">返回 Review</button><div><button class="btn soft" data-brief-regenerate>按当前状态重新生成</button><button class="btn primary" data-brief-print>打印 / 保存 PDF</button></div></div>' +
+      '<header class="brief-cover"><div><span>ZG AI GPS · WEEKLY DECISION BRIEF</span><h1>本周变化、判断、结果与下周重点</h1><p>' + esc(b.headline) + '</p></div><div class="brief-meta"><strong>' + esc(b.week) + '</strong><span>' + esc(b.team) + '</span><span>Manager · ' + esc(b.manager) + '</span><small>生成于 ' + esc(briefDateLabel(b.generatedAt)) + '</small></div></header>' +
+      '<section class="brief-metrics"><div><span>医院推进</span><strong>' + b.metrics.hospital + '%</strong></div><div><span>Action 执行</span><strong>' + b.metrics.action + '%</strong></div><div><span>Coaching</span><strong>' + b.metrics.coaching + '%</strong></div><div><span>Outcome</span><strong>' + b.metrics.outcome + '%</strong></div><div><span>团队拜访分</span><strong>' + b.metrics.teamScore + '</strong><small>' + (b.metrics.trendDelta >= 0 ? "+" : "") + b.metrics.trendDelta + '</small></div></section>' +
+      '<section class="brief-section"><div class="brief-section-title"><span>01</span><div><h2>本周什么变了</h2><p>只保留会改变下周动作的变化.</p></div></div><div class="brief-changes">' + changes + '</div></section>' +
+      '<section class="brief-section"><div class="brief-section-title"><span>02</span><div><h2>重点医院发生了什么</h2><p>目标、Action 进展和本周 Outcome 放在同一层看.</p></div></div><div class="brief-hospital-grid">' + hospitals + '</div></section>' +
+      '<section class="brief-two-col"><div class="brief-section"><div class="brief-section-title"><span>03</span><div><h2>本周做了什么判断</h2><p>管理动作必须有原因和对应 Action.</p></div></div><div class="brief-decision-list">' + decisions + '</div></div>' +
+      '<div class="brief-section"><div class="brief-section-title"><span>04</span><div><h2>结果到底如何</h2><p>客户行为和业务里程碑, 不只是任务完成.</p></div></div><div class="brief-outcome-list">' + outcomes + '</div></div></section>' +
+      '<section class="brief-two-col"><div class="brief-section"><div class="brief-section-title"><span>05</span><div><h2>仍需警惕什么</h2><p>只保留会影响下周结果的高优先风险.</p></div></div><div class="brief-risk-list">' + risks + '</div></div>' +
+      '<div class="brief-section"><div class="brief-section-title"><span>06</span><div><h2>值得复制什么</h2><p>高质量个人经验先成为团队 Playbook 候选.</p></div></div>' + champion + '</div></section>' +
+      '<section class="brief-section brief-next"><div class="brief-section-title"><span>07</span><div><h2>下周只做这些</h2><p>已经过经理确认的可验证 Action.</p></div></div><div class="brief-next-list">' + next + '</div></section>' +
+      '<footer class="brief-footer"><div><span>DECISION PRINCIPLE</span><strong>少看结果报表, 多确认下一步动作是否真的改变客户行为.</strong></div><div><span>SNAPSHOT ID</span><strong>' + esc(b.id) + '</strong></div></footer>' +
+    '</div>';
+  }
+
   function renderManagerReview() {
     var chain = managerReviewChainStatus();
     var avgHospital = Math.round((chain.hospital + chain.action) / 2);
@@ -2700,7 +2762,7 @@
     $("#roleName").textContent = state.role;
     $$(".nav-item").forEach(function (btn) {
       var navRoute = btn.getAttribute("data-route");
-      btn.classList.toggle("active", navRoute === state.route || (state.route === "visitlive" && navRoute === "rep"));
+      btn.classList.toggle("active", navRoute === state.route || (state.route === "visitlive" && navRoute === "rep") || (state.route === "weeklybrief" && navRoute === "managerreview"));
     });
 
     var view = "";
@@ -2708,6 +2770,7 @@
     else if (state.route === "visitlive") view = renderVisitLive();
     else if (state.route === "teamcoaching") view = renderTeamCoaching();
     else if (state.route === "managerreview") view = renderManagerReview();
+    else if (state.route === "weeklybrief") view = renderWeeklyDecisionBrief();
     else if (state.route === "hospital") view = renderHospital();
     else if (state.route === "doctor") view = renderDoctor();
     else if (state.route === "coaching") view = renderCoaching();
@@ -2992,7 +3055,17 @@
       });
     });
 
-    $$("[data-review-route]").forEach(function (el) {
+    $("[data-brief-regenerate]").forEach(function (el) {
+      el.addEventListener("click", regenerateWeeklyDecisionBrief);
+    });
+
+    $("[data-brief-print]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        window.print();
+      });
+    });
+
+    $("[data-review-route]").forEach(function (el) {
       el.addEventListener("click", function (event) {
         event.stopPropagation();
         var route = el.getAttribute("data-review-route");
