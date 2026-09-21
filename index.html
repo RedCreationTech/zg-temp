@@ -35,9 +35,9 @@
         </div>
       </div>
 
-      <div class="system-pill">
+      <div class="system-pill" id="runtimeMode">
         <span class="system-dot"></span>
-        System of Action
+        System of Action · 检测运行模式
       </div>
 
       <nav class="main-nav" aria-label="主导航">
@@ -75,6 +75,10 @@
         <button class="nav-item" data-route="guardrails">
           <svg><use href="#i-shield"/></svg>
           <span>合规与安全</span>
+        </button>
+        <button class="nav-item" data-route="admin">
+          <svg><use href="#i-user"/></svg>
+          <span>组织与权限</span>
         </button>
       </nav>
 
@@ -156,6 +160,7 @@
 
   <script src="./data.js"></script>
   <script src="./mock-api.js"></script>
+  <script src="./api-client.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
