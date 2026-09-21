@@ -3373,11 +3373,11 @@
       });
     });
 
-    $("[data-sync-cockpit-brief]").forEach(function (el) {
+    $$("[data-sync-cockpit-brief]").forEach(function (el) {
       el.addEventListener("click", syncCockpitDecisionsToBrief);
     });
 
-    $("[data-view-weekly-brief]").forEach(function (el) {
+    $$("[data-view-weekly-brief]").forEach(function (el) {
       el.addEventListener("click", function () {
         if (!state.weeklyDecisionBrief) {
           showToast("当前还没有 Weekly Decision Brief");
