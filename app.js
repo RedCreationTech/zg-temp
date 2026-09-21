@@ -434,8 +434,8 @@
     var script = doc.script.map(function (x) {
       return '<div class="script-line"><b>' + esc(x[0]) + '</b><span>' + esc(x[1]) + '</span></div>';
     }).join("");
-    var evidence = doc.evidence.map(function (e) {
-      return '<div class="evidence-item"><div class="evidence-icon">' + esc(e[0]) + '</div><div><strong>' + esc(e[1]) + '</strong><span>' + esc(e[2]) + '</span></div></div>';
+    var evidence = doc.evidence.map(function (e, index) {
+      return '<button class="evidence-item evidence-button" data-evidence-index="' + index + '"><div class="evidence-icon">' + esc(e[0]) + '</div><div><strong>' + esc(e[1]) + '</strong><span>' + esc(e[2]) + '</span></div><div class="evidence-trace">可追溯 →</div></button>';
     }).join("");
 
     return '<div class="page-banner"><div><span class="banner-kicker">DOCTOR AGENT</span><h2>医生下一步行动导航</h2><p>不是生成一段话术, 而是结合医院目标、医生画像、关键时机和证据, 判断“这一次最应该推进什么”.</p></div><div class="banner-side"><strong>' + doc.nextScore + '</strong><span>行动优先分 / 100</span></div></div>' +
@@ -453,6 +453,18 @@
           '<div class="mt-16">' + renderDoctorJourney(doc) + '</div>' +
         '</div>' +
       '</div>';
+  }
+
+  function openEvidenceTrace(index) {
+    var doc = data.doctors.find(function (x) { return x.id === state.selectedDoctor; }) || data.doctors[0];
+    var e = doc.evidence && doc.evidence[index];
+    if (!e) return;
+    var body =
+      '<div class="drawer-section"><h4>证据卡</h4><div class="drawer-callout"><strong>' + esc(e[1]) + '</strong><p>' + esc(e[2]) + '</p></div></div>' +
+      '<div class="drawer-section"><h4>证据追溯</h4><div class="drawer-meta"><div class="meta-cell"><b>TYPE</b><span>' + esc(e[0]) + '</span></div><div class="meta-cell"><b>STATUS</b><span>医学审核通过</span></div><div class="meta-cell"><b>VERSION</b><span>2026.09</span></div><div class="meta-cell"><b>SCOPE</b><span>批准适应症内专业沟通</span></div></div></div>' +
+      '<div class="drawer-section"><h4>FACT / INFERENCE</h4><div class="drawer-success"><span>FACT</span><span>该证据作为专业沟通依据时必须保留原始来源、版本和适用边界. Agent 生成的话术属于 INFERENCE, 不能改变证据原意.</span></div></div>' +
+      '<div class="drawer-section"><h4>当前医生为什么看到它</h4><p class="small-note">' + esc(doc.name) + ' 当前关注 “' + esc(doc.focus) + '”, 系统仅把与当前触发场景直接相关的已审核证据排到前面.</p></div>';
+    openDrawer(e[1], body, null);
   }
 
   function renderCoaching() {
@@ -1076,7 +1088,13 @@
       el.addEventListener("click", function () { navigate(el.getAttribute("data-route-jump")); });
     });
 
-    $$("[data-doctor-id]").forEach(function (el) {
+    $("[data-evidence-index]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        openEvidenceTrace(Number(el.getAttribute("data-evidence-index")));
+      });
+    });
+
+    $("[data-doctor-id]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.selectedDoctor = el.getAttribute("data-doctor-id");
         render();
