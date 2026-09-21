@@ -4048,10 +4048,11 @@
       });
     });
 
-    $$("[data-scale-plan-task]").forEach(function (el) {
+    $("[data-scale-plan-task]").forEach(function (el) {
       el.addEventListener("click", function () {
         var id = el.getAttribute("data-scale-plan-task");
         state.scaleExecutionChecks[id] = !state.scaleExecutionChecks[id];
+        if (state.scaleExecutionChecks[id]) delete state.scaleExecutionRisks[id];
         saveState();
         render();
       });
