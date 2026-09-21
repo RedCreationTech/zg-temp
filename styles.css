@@ -365,3 +365,49 @@
   .executive-cover h1{font-size:18px}
   .executive-summary-panel,.executive-card,.executive-next,.health-card{break-inside:avoid}
 }
+
+
+/* Director Cockpit -> Weekly Brief integration */
+.cockpit-brief-impact-head{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.cockpit-brief-impact-head>div{padding:9px 10px;border:1px solid #e7ecf3;border-radius:9px;background:#fafbfd}
+.cockpit-brief-impact-head span{display:block;font-size:7px;color:#929dae}
+.cockpit-brief-impact-head strong{display:block;font-size:10px;color:#46546b;margin-top:3px}
+.warn-text{color:#c27831!important}
+.cockpit-brief-impact-list{display:flex;flex-direction:column;gap:7px}
+.cockpit-brief-impact-item{display:grid;grid-template-columns:72px 1fr;gap:9px;align-items:start;padding:9px;border:1px solid #e7ecf3;border-radius:9px;background:#fff}
+.cockpit-brief-impact-item strong{display:block;font-size:9px;color:#43516a}
+.cockpit-brief-impact-item p{font-size:8px;color:#6d7b90;line-height:1.5;margin:4px 0 0}
+.cockpit-brief-impact-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+
+.brief-director-decisions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.brief-director-decision{padding:11px;border:1px solid #e5eaf2;border-radius:10px;background:#fafbfd}
+.brief-director-decision-head{display:flex;align-items:center;gap:8px}
+.brief-director-decision-head strong{font-size:9px;color:#43516a;flex:1}
+.brief-director-decision-head em{font-style:normal;font-size:7px;color:#8e99aa}
+.brief-director-decision>p{font-size:8px;color:#6f7d91;line-height:1.5;margin:7px 0}
+.brief-director-impact{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.brief-director-impact>div{padding:8px;border-radius:8px;background:#fff;border:1px solid #e8edf3}
+.brief-director-impact span{display:block;font-size:7px;color:#909bad}
+.brief-director-impact strong{display:block;font-size:8px;color:#536179;line-height:1.45;margin-top:3px}
+
+.director-management-label{display:block;font-size:8px;color:#43516a}
+.director-table td:last-child small{display:block;max-width:260px;font-size:7px;color:#8e99aa;line-height:1.45;margin-top:4px}
+
+.executive-director-decisions{margin-top:12px;padding:16px;border-radius:13px;background:linear-gradient(135deg,#f8faff,#fff);border:1px solid #dce5f8}
+.executive-decision-strip{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.executive-decision-strip>div{padding:10px;border-radius:9px;background:#fff;border:1px solid #e4eaf4}
+.executive-decision-strip>div>strong{display:inline-block;font-size:9px;color:#42516a;margin-left:7px}
+.executive-decision-strip>div>p{font-size:8px;color:#6c7a8e;line-height:1.45;margin:6px 0 0}
+
+@media(max-width:900px){
+  .cockpit-brief-impact-head,.brief-director-decisions,.brief-director-impact,.executive-decision-strip{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+  .cockpit-brief-impact-actions{flex-direction:column}
+  .cockpit-brief-impact-actions .btn{width:100%}
+  .cockpit-brief-impact-item{grid-template-columns:1fr}
+}
+@media print{
+  .cockpit-brief-impact-actions{display:none!important}
+  .brief-director-decision,.executive-director-decisions,.executive-decision-strip>div{break-inside:avoid}
+}
