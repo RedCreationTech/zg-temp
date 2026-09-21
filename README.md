@@ -318,6 +318,7 @@ GitHub Actions 在 push / pull request 时执行同样的检查。
 - `docs/C4-ARCHITECTURE.md`
 - `docs/API.md`
 - `docs/DOMAIN-MODEL.md`
+- `docs/STATE-MACHINE.md`
 
 ## 推荐演示路径
 
@@ -388,24 +389,24 @@ docs/
 
 ## 下一阶段
 
-v0.4 已经完成 Node API、领域模型、Decision Engine、组织权限、审计和 Outcome 闭环。
+v0.5 已经完成 Node API、领域模型、Decision Engine、NBA → Action → Outcome → RuleValidation 状态机、组织权限、审计和 Human Review 闭环。
 
 下一阶段重点不再是继续扩充假页面，而是进入真实客户 Pilot 数据能力：
 
 1. PostgreSQL 替换 runtime.json
 2. Hospital / Doctor / Visit Repository
-3. Action 正式实体与 NBA Accept 流程
-4. Outcome 与 Action 自动关联
-5. Decision Rule Validator
-6. Rule Versioning / Human Review
-7. CRM / SFE Connector
-8. 医学知识库 / Evidence Service
-9. 真实 ASR
-10. Model Gateway
-11. Structured LLM Decision Pipeline
-12. Pilot Metric 自动采集
-13. Enterprise SSO / OIDC
-14. Region / Territory 数据隔离
-15. 不可篡改 Audit Trail
+3. PostgreSQL Repository + Migration
+4. Decision Rule 版本管理
+5. RuleValidation 统计模型与样本量门槛
+6. CRM / SFE Connector
+7. 医学知识库 / Evidence Service
+8. 真实 ASR
+9. Model Gateway
+10. Structured LLM Decision Pipeline
+11. Pilot Metric 自动采集
+12. Enterprise SSO / OIDC
+13. Region / Territory 数据隔离
+14. 不可篡改 Audit Trail
+15. 前端工程化为 Vue 3 / TypeScript
 
-当前仓库已经从“客户演示页面”进入“可继续接真实数据的 Pilot MVP 骨架”阶段。
+当前仓库已经从“客户演示页面”进入“可接真实数据并验证 Action–Outcome–Learning 的 Pilot MVP 骨架”阶段。
