@@ -13,6 +13,7 @@
     teamcoaching: "团队辅导",
     managerreview: "周度 Review",
     weeklybrief: "Weekly Decision Brief",
+    scaleplan: "Scale Execution Plan",
     coaching: "拜访辅导",
     cockpit: "总监驾驶舱",
     pilot: "Pilot 运营",
@@ -101,6 +102,9 @@
     scaleGateTarget: saved.scaleGateTarget || "east2",
     scaleGateDecision: saved.scaleGateDecision || null,
     scaleGateHistory: saved.scaleGateHistory || [],
+    scaleExecutionPlan: saved.scaleExecutionPlan || null,
+    scaleExecutionChecks: saved.scaleExecutionChecks || {},
+    scaleExecutionPhase: saved.scaleExecutionPhase || "d30",
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -154,6 +158,9 @@
       scaleGateTarget: state.scaleGateTarget,
       scaleGateDecision: state.scaleGateDecision,
       scaleGateHistory: state.scaleGateHistory,
+      scaleExecutionPlan: state.scaleExecutionPlan,
+      scaleExecutionChecks: state.scaleExecutionChecks,
+      scaleExecutionPhase: state.scaleExecutionPhase,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -2751,6 +2758,238 @@
     return false;
   }
 
+  function scaleTargetProfile(targetId) {
+    var profiles = {
+      east2:{
+        hospitals:[
+          { id:"e2-h1", name:"华东二区中心医院", tier:"A", focus:"复制 MDT 场景推进", readiness:92 },
+          { id:"e2-h2", name:"城东大学附属医院", tier:"A", focus:"复制患者识别 → 病例共识", readiness:86 },
+          { id:"e2-h3", name:"新城人民医院", tier:"B", focus:"验证 Hospital Agent 杠杆识别", readiness:78 }
+        ],
+        reps:[
+          { id:"e2-r1", name:"陈宇", role:"首批代表", baseline:74, focus:"探询 + Evidence 匹配" },
+          { id:"e2-r2", name:"林倩", role:"首批代表", baseline:69, focus:"Commitment 推进" },
+          { id:"e2-r3", name:"王杰", role:"首批代表", baseline:77, focus:"医院策略 → 医生 Action" },
+          { id:"e2-r4", name:"周宁", role:"第二批代表", baseline:72, focus:"病例会推进" },
+          { id:"e2-r5", name:"许文", role:"第二批代表", baseline:70, focus:"探询与异议处理" }
+        ]
+      },
+      central1:{
+        hospitals:[
+          { id:"c1-h1", name:"华中一区中心医院", tier:"A", focus:"先建立患者识别 Context", readiness:78 },
+          { id:"c1-h2", name:"江城大学附属医院", tier:"A", focus:"验证 Doctor NBA", readiness:73 },
+          { id:"c1-h3", name:"新区人民医院", tier:"B", focus:"验证 Coaching 闭环", readiness:65 }
+        ],
+        reps:[
+          { id:"c1-r1", name:"李辰", role:"首批代表", baseline:71, focus:"Context 探询" },
+          { id:"c1-r2", name:"韩雪", role:"首批代表", baseline:68, focus:"Evidence 匹配" },
+          { id:"c1-r3", name:"宋扬", role:"首批代表", baseline:73, focus:"下一步承诺" },
+          { id:"c1-r4", name:"顾琳", role:"第二批代表", baseline:70, focus:"经理 Coaching" }
+        ]
+      },
+      southcore:{
+        hospitals:[
+          { id:"sc-h1", name:"华南核心医院 A", tier:"A", focus:"先验证医院策略模型适配", readiness:66 },
+          { id:"sc-h2", name:"华南核心医院 B", tier:"A", focus:"先补主数据和影响者地图", readiness:61 },
+          { id:"sc-h3", name:"华南核心医院 C", tier:"B", focus:"观察区, 暂不进入完整闭环", readiness:55 }
+        ],
+        reps:[
+          { id:"sc-r1", name:"代表 A", role:"首批代表", baseline:68, focus:"基础 Context" },
+          { id:"sc-r2", name:"代表 B", role:"首批代表", baseline:66, focus:"拜访目标" },
+          { id:"sc-r3", name:"代表 C", role:"第二批代表", baseline:70, focus:"Outcome 记录" }
+        ]
+      }
+    };
+    return profiles[targetId] || profiles.east2;
+  }
+
+  function createScaleExecutionPlan(decisionSnapshot) {
+    if (!decisionSnapshot || decisionSnapshot.decision === "hold") return null;
+    var targetMeta = scaleGateTargets().find(function(t){ return t.id === decisionSnapshot.targetId; }) || scaleGateTargets()[0];
+    var profile = scaleTargetProfile(targetMeta.id);
+    var isConditional = decisionSnapshot.decision === "conditional";
+    var hospitalCount = isConditional ? 2 : 3;
+    var repCount = isConditional ? 3 : Math.min(5,profile.reps.length);
+    var hospitals = profile.hospitals.slice(0,hospitalCount);
+    var reps = profile.reps.slice(0,repCount);
+
+    var agents = [
+      { id:"hospital", name:"Hospital Agent", phase:"D0–30", purpose:"建立目标医院机会、生态与 Top Lever" },
+      { id:"doctor", name:"Doctor Agent", phase:"D0–30", purpose:"把医院杠杆落到关键医生下一步 Action" },
+      { id:"coaching", name:"Coaching Agent", phase:"D0–30", purpose:"建立拜访后 3 分钟复盘与四轮陪练" },
+      { id:"cockpit", name:"Director Cockpit", phase:"D31–60", purpose:"形成加资源 / 纠偏 / 升级 / 停止决策闭环" },
+      { id:"learning", name:"Learning Engine", phase:"D31–90", purpose:"验证 Champion Pattern 与 Decision Rule 复用" },
+      { id:"brief", name:"Weekly / Executive Brief", phase:"D31–90", purpose:"建立周度管理 Review 与 Scale 证据" }
+    ];
+
+    var phases = [
+      {
+        id:"d30",
+        label:"0–30 天",
+        title:"复制最小可运行闭环",
+        objective:"先让首批医院和代表真正跑起来, 不追求覆盖面.",
+        gate:"DAY 30 · LAUNCH GATE",
+        success:"主数据完整 ≥90%, 首批代表全部跑通至少 2 次真实拜访闭环.",
+        tasks:[
+          { id:"d30-t1", owner:"区域经理", title:"确认首批目标医院与 Top Lever", success:hospitals.length + " 家医院完成机会 / 可改变度 / 生态图基线" },
+          { id:"d30-t2", owner:"数据负责人", title:"完成医院 / 医生 / 代表主数据准备", success:"核心字段完整度 ≥90%, 无阻塞性数据缺口" },
+          { id:"d30-t3", owner:"销售卓越", title:"完成首批代表能力基线", success:reps.length + " 名代表完成拜访评分与 Top 1 行为诊断" },
+          { id:"d30-t4", owner:"产品运营", title:"启用 Hospital + Doctor + Coaching Agent", success:"三类 Agent 在目标区域均产生真实 Action" },
+          { id:"d30-t5", owner:"首批代表", title:"每人完成至少 2 次真实拜访闭环", success:"拜访前准备 → 现场承诺 → 3 分钟复盘全部有记录" }
+        ]
+      },
+      {
+        id:"d60",
+        label:"31–60 天",
+        title:"证明行动与管理闭环",
+        objective:"验证 NBA 不只是被看见, 而是真的进入执行并产生客户行为变化.",
+        gate:"DAY 60 · VALUE GATE",
+        success:"NBA 采纳 ≥70%, Action 完成 ≥70%, 至少 2 类正向 Outcome 可复现.",
+        tasks:[
+          { id:"d60-t1", owner:"区域经理", title:"运行每周 30 分钟 Coaching Agenda", success:"每周只辅导 Top 2 代表, 完成 Manager Check Evidence" },
+          { id:"d60-t2", owner:"销售总监", title:"启用 Director Cockpit 管理决策", success:"高优先问题全部收敛到明确管理动作" },
+          { id:"d60-t3", owner:"代表团队", title:"提高 NBA → Action 转化", success:"NBA 采纳 ≥70%, Action 完成 ≥70%" },
+          { id:"d60-t4", owner:"产品运营", title:"建立 Outcome 记录纪律", success:"关键 Action 均有客户行为 / 业务里程碑 Outcome" },
+          { id:"d60-t5", owner:"地区经理", title:"完成连续 4 周 Weekly Review", success:"医院目标 → Coaching → Outcome → 下周计划稳定运行" }
+        ]
+      },
+      {
+        id:"d90",
+        label:"61–90 天",
+        title:"证明可复制并决定下一步扩展",
+        objective:"验证成功打法能跨医院 / 代表复现, 并形成下一阶段经营资产.",
+        gate:"DAY 90 · SCALE REVIEW",
+        success:"至少 1 个 Champion Pattern 在 2–3 个同类场景复现, 管理层可做下一轮 Scale Decision.",
+        tasks:[
+          { id:"d90-t1", owner:"销售卓越", title:"验证 Champion Pattern 跨场景复现", success:"至少 2 个同类医院出现相同正向 Outcome" },
+          { id:"d90-t2", owner:"Learning Engine", title:"形成可验证 Decision Rule 候选", success:"Context → Decision → Action → Outcome 证据链完整" },
+          { id:"d90-t3", owner:"销售总监", title:"完成区域 Executive Brief", success:"资源变化、风险、Outcome、下阶段重点可一页阅读" },
+          { id:"d90-t4", owner:"区域负责人", title:"评估第二批医院 / 代表扩展", success:"下一阶段目标、资源与 Gate 明确" },
+          { id:"d90-t5", owner:"管理层", title:"召开 Day 90 Scale Review", success:"明确 Hold / Continue / Expand 决策" }
+        ]
+      }
+    ];
+
+    var dataChecklist = [
+      "医院主数据、分层、目标与季度目标",
+      "关键医生角色、影响力、关注点与触发信号",
+      "代表辖区、能力基线与最近重点拜访",
+      "医学证据版本、审核状态与适用 Scope",
+      "Action / Outcome / Coaching / Decision Trace 字段",
+      "目标医院资源与跨部门支持映射"
+    ];
+
+    var gates = [
+      { id:"g30", day:"Day 30", title:"Launch Gate", question:"最小闭环真的跑起来了吗?", pass:"主数据 ≥90% + 首批代表完成真实闭环" },
+      { id:"g60", day:"Day 60", title:"Value Gate", question:"Action 真的改变客户行为了吗?", pass:"NBA ≥70% + Action ≥70% + 正向 Outcome 可复现" },
+      { id:"g90", day:"Day 90", title:"Scale Review", question:"打法能跨医院 / 代表复制吗?", pass:"Champion Pattern 跨场景复现 + 管理闭环稳定" }
+    ];
+
+    return {
+      id:"execution-" + Date.now(),
+      decisionId:decisionSnapshot.id,
+      decision:decisionSnapshot.decision,
+      decisionLabel:decisionSnapshot.label,
+      targetId:targetMeta.id,
+      target:targetMeta.name,
+      similarity:targetMeta.similarity,
+      dataReadiness:targetMeta.data,
+      effort:targetMeta.effort,
+      createdAt:new Date().toISOString(),
+      scope:isConditional ? "单区域受控复制" : "正式区域复制",
+      hospitals:hospitals,
+      reps:reps,
+      agents:agents,
+      dataChecklist:dataChecklist,
+      phases:phases,
+      gates:gates
+    };
+  }
+
+  function scalePlanPhaseProgress(plan, phaseId) {
+    var phase = plan && plan.phases ? plan.phases.find(function(p){ return p.id === phaseId; }) : null;
+    if (!phase) return { done:0,total:0,pct:0 };
+    var done = phase.tasks.filter(function(t){ return !!state.scaleExecutionChecks[t.id]; }).length;
+    return { done:done,total:phase.tasks.length,pct:phase.tasks.length ? Math.round(done/phase.tasks.length*100) : 0 };
+  }
+
+  function overallScalePlanProgress(plan) {
+    var tasks = [];
+    (plan && plan.phases || []).forEach(function(p){ tasks = tasks.concat(p.tasks || []); });
+    var done = tasks.filter(function(t){ return !!state.scaleExecutionChecks[t.id]; }).length;
+    return { done:done,total:tasks.length,pct:tasks.length ? Math.round(done/tasks.length*100) : 0 };
+  }
+
+  function regenerateScaleExecutionPlan() {
+    if (!state.scaleGateDecision || state.scaleGateDecision.decision === "hold") {
+      showToast("当前 Scale Decision 不包含扩区执行计划");
+      return;
+    }
+    state.scaleExecutionPlan = createScaleExecutionPlan(state.scaleGateDecision);
+    state.scaleExecutionChecks = {};
+    state.scaleExecutionPhase = "d30";
+    saveState();
+    render();
+    showToast("Scale Execution Plan 已按当前决策重新生成");
+  }
+
+  function renderScaleExecutionPlan() {
+    var plan = state.scaleExecutionPlan;
+    if (!plan) {
+      return '<div class="scale-plan-empty"><div><span>SCALE EXECUTION PLAN</span><h2>当前没有扩区执行计划</h2><p>只有“有条件扩展 / 批准扩区”决策会生成 30/60/90 天复制计划.</p><button class="btn primary" data-route-jump="pilot">返回 Scale Gate</button></div></div>';
+    }
+
+    var overall = overallScalePlanProgress(plan);
+    var phase = plan.phases.find(function(p){ return p.id === state.scaleExecutionPhase; }) || plan.phases[0];
+    var phaseProgress = scalePlanPhaseProgress(plan,phase.id);
+
+    var phaseTabs = plan.phases.map(function(p){
+      var progress = scalePlanPhaseProgress(plan,p.id);
+      return '<button class="scale-phase-tab ' + (phase.id === p.id ? "active" : "") + '" data-scale-phase="' + p.id + '"><span>' + esc(p.label) + '</span><strong>' + esc(p.title) + '</strong><b>' + progress.done + '/' + progress.total + '</b></button>';
+    }).join("");
+
+    var tasks = phase.tasks.map(function(t,i){
+      var done = !!state.scaleExecutionChecks[t.id];
+      return '<button class="scale-plan-task ' + (done ? "done" : "") + '" data-scale-plan-task="' + t.id + '"><span class="scale-task-check">' + (done ? "✓" : "") + '</span><div><b>0' + (i+1) + ' · ' + esc(t.owner) + '</b><strong>' + esc(t.title) + '</strong><p>Success · ' + esc(t.success) + '</p></div></button>';
+    }).join("");
+
+    var hospitals = plan.hospitals.map(function(h){
+      return '<div class="scale-plan-hospital"><div><span>' + esc(h.tier) + ' 类</span><strong>' + esc(h.name) + '</strong></div><b>' + h.readiness + '%</b><p>' + esc(h.focus) + '</p></div>';
+    }).join("");
+
+    var reps = plan.reps.map(function(r){
+      return '<div class="scale-plan-rep"><div><strong>' + esc(r.name) + '</strong><span>' + esc(r.role) + '</span></div><b>Baseline ' + r.baseline + '</b><p>' + esc(r.focus) + '</p></div>';
+    }).join("");
+
+    var agents = plan.agents.map(function(a){
+      return '<div class="scale-plan-agent"><span>' + esc(a.phase) + '</span><strong>' + esc(a.name) + '</strong><p>' + esc(a.purpose) + '</p></div>';
+    }).join("");
+
+    var dataItems = plan.dataChecklist.map(function(item,i){
+      var id = "data-" + (i+1);
+      var done = !!state.scaleExecutionChecks[id];
+      return '<button class="scale-data-item ' + (done ? "done" : "") + '" data-scale-plan-task="' + id + '"><span>' + (done ? "✓" : "") + '</span><p>' + esc(item) + '</p></button>';
+    }).join("");
+
+    var gates = plan.gates.map(function(g){
+      var phaseId = g.id === "g30" ? "d30" : (g.id === "g60" ? "d60" : "d90");
+      var gp = scalePlanPhaseProgress(plan,phaseId);
+      var passed = gp.pct === 100;
+      return '<div class="execution-gate ' + (passed ? "passed" : "") + '"><div><span>' + esc(g.day) + '</span><strong>' + esc(g.title) + '</strong></div><p>' + esc(g.question) + '</p><small>' + esc(g.pass) + '</small><b>' + gp.pct + '%</b></div>';
+    }).join("");
+
+    return '<div class="scale-plan-page">' +
+      '<div class="scale-plan-toolbar"><button class="btn ghost" data-route-jump="pilot">返回 Scale Gate</button><div><button class="btn soft" data-scale-plan-regenerate>重新生成计划</button><button class="btn primary" data-scale-plan-executive>Executive Brief</button></div></div>' +
+      '<header class="scale-plan-cover"><div><span>SCALE EXECUTION PLAN · 30 / 60 / 90 DAYS</span><h1>' + esc(plan.target) + ' · ' + esc(plan.scope) + '</h1><p>' + esc(plan.decisionLabel) + ' 已转化为可执行复制计划. 每个阶段必须通过管理 Gate, 不以“部署完成”代替业务验证.</p></div><div class="scale-plan-cover-meta"><strong>' + overall.pct + '%</strong><span>总执行进度</span><small>' + overall.done + '/' + overall.total + ' 项完成</small></div></header>' +
+      '<section class="scale-plan-summary"><div><span>目标区域</span><strong>' + esc(plan.target) + '</strong><small>相似度 ' + plan.similarity + '%</small></div><div><span>首批医院</span><strong>' + plan.hospitals.length + '</strong><small>只复制高相似场景</small></div><div><span>首批代表</span><strong>' + plan.reps.length + '</strong><small>先做能力基线</small></div><div><span>复制 Agent</span><strong>' + plan.agents.length + '</strong><small>按阶段启用</small></div><div><span>数据准备</span><strong>' + plan.dataReadiness + '%</strong><small>当前目标区基线</small></div></section>' +
+      '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>01</span><div><h2>30 / 60 / 90 天执行路线</h2><p>阶段目标固定, 任务完成状态保存在当前浏览器.</p></div></div><div class="scale-phase-tabs">' + phaseTabs + '</div><div class="scale-phase-body"><div class="scale-phase-header"><div><span>' + esc(phase.gate) + '</span><h3>' + esc(phase.title) + '</h3><p>' + esc(phase.objective) + '</p></div><div><strong>' + phaseProgress.pct + '%</strong><span>' + phaseProgress.done + '/' + phaseProgress.total + '</span></div></div><div class="scale-plan-task-list">' + tasks + '</div><div class="scale-phase-success"><span>PHASE SUCCESS</span><strong>' + esc(phase.success) + '</strong></div></div></section>' +
+      '<section class="scale-plan-grid"><div class="scale-plan-section"><div class="scale-plan-section-title"><span>02</span><div><h2>首批目标医院</h2><p>先复制最相似场景, 不做全面铺开.</p></div></div><div class="scale-plan-hospitals">' + hospitals + '</div></div><div class="scale-plan-section"><div class="scale-plan-section-title"><span>03</span><div><h2>首批代表</h2><p>上线前先建立能力基线和训练重点.</p></div></div><div class="scale-plan-reps">' + reps + '</div></div></section>' +
+      '<section class="scale-plan-grid"><div class="scale-plan-section"><div class="scale-plan-section-title"><span>04</span><div><h2>Agent 复制顺序</h2><p>先复制行动闭环, 再复制管理与学习能力.</p></div></div><div class="scale-plan-agents">' + agents + '</div></div><div class="scale-plan-section"><div class="scale-plan-section-title"><span>05</span><div><h2>数据准备清单</h2><p>数据不齐时不强行复制模型.</p></div></div><div class="scale-data-list">' + dataItems + '</div></div></section>' +
+      '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>06</span><div><h2>Management Gates</h2><p>Day 30 / 60 / 90 三次明确管理判断.</p></div></div><div class="execution-gates">' + gates + '</div></section>' +
+      '<footer class="scale-plan-footer"><div><span>SCALE PRINCIPLE</span><strong>复制的是可验证的行动与管理闭环, 不是把软件菜单搬到另一个区域.</strong></div><div><span>PLAN ID</span><strong>' + esc(plan.id) + '</strong></div></footer>' +
+    '</div>';
+  }
+
   function commitScaleGateDecision(key) {
     var gate = scaleGateModel();
     if (!scaleDecisionAllowed(key, gate)) {
@@ -2775,6 +3014,14 @@
     state.scaleGateDecision = snapshot;
     state.scaleGateHistory.unshift(snapshot);
     state.scaleGateHistory = state.scaleGateHistory.slice(0,8);
+    if (key === "hold") {
+      state.scaleExecutionPlan = null;
+      state.scaleExecutionChecks = {};
+    } else {
+      state.scaleExecutionPlan = createScaleExecutionPlan(snapshot);
+      state.scaleExecutionChecks = {};
+      state.scaleExecutionPhase = "d30";
+    }
     saveState();
     render();
     showToast(meta.label + (key === "hold" ? "" : " · " + target.name));
@@ -2805,7 +3052,7 @@
     }).join("");
 
     var current = state.scaleGateDecision
-      ? '<div class="scale-current-decision"><span>当前 Scale Decision</span><strong>' + esc(state.scaleGateDecision.label) + '</strong><p>' + esc(state.scaleGateDecision.target) + ' · Gate ' + state.scaleGateDecision.overall + '% · W' + state.scaleGateDecision.pilotWeek + '</p></div>'
+      ? '<div class="scale-current-decision"><span>当前 Scale Decision</span><strong>' + esc(state.scaleGateDecision.label) + '</strong><p>' + esc(state.scaleGateDecision.target) + ' · Gate ' + state.scaleGateDecision.overall + '% · W' + state.scaleGateDecision.pilotWeek + '</p>' + (state.scaleExecutionPlan ? '<button class="btn primary full mt-12" data-open-scale-plan>查看 30/60/90 天执行计划</button>' : '') + '</div>'
       : '<div class="scale-current-decision pending"><span>当前 Scale Decision</span><strong>尚未做出最终决策</strong><p>先检查 Gate, 再由管理层明确选择.</p></div>';
 
     return '<section class="scale-gate" id="scaleGate">' +
@@ -2822,7 +3069,7 @@
     var gate = scaleGateModel();
     var decision = state.scaleGateDecision;
     var meta = decision ? scaleDecisionMeta(decision.decision) : scaleDecisionMeta(gate.recommendation);
-    return '<section class="executive-scale-signal"><div><span>PILOT SCALE DECISION</span><h3>' + esc(decision ? decision.label : "等待正式 Scale Gate 决策") + '</h3><p>' + (decision ? "目标: " + esc(decision.target) + " · Gate " + decision.overall + "%" : "当前 AI 建议: " + esc(meta.label) + " · Gate " + gate.overall + "%") + '</p></div><div><strong>' + gate.passed + '/' + gate.total + '</strong><span>Gate 已通过</span></div><button class="btn primary no-print" data-enter-scale-gate>进入 Scale Gate</button></section>';
+    return '<section class="executive-scale-signal"><div><span>PILOT SCALE DECISION</span><h3>' + esc(decision ? decision.label : "等待正式 Scale Gate 决策") + '</h3><p>' + (decision ? "目标: " + esc(decision.target) + " · Gate " + decision.overall + "%" : "当前 AI 建议: " + esc(meta.label) + " · Gate " + gate.overall + "%") + '</p></div><div><strong>' + gate.passed + '/' + gate.total + '</strong><span>Gate 已通过</span></div><div class="executive-scale-actions no-print"><button class="btn ghost" data-enter-scale-gate>进入 Scale Gate</button>' + (state.scaleExecutionPlan ? '<button class="btn primary" data-open-scale-plan>查看 90 天执行计划</button>' : '') + '</div></section>';
   }
 
   function renderPilot() {
@@ -3239,7 +3486,7 @@
     $("#roleName").textContent = state.role;
     $$(".nav-item").forEach(function (btn) {
       var navRoute = btn.getAttribute("data-route");
-      btn.classList.toggle("active", navRoute === state.route || (state.route === "visitlive" && navRoute === "rep") || (state.route === "weeklybrief" && navRoute === "managerreview"));
+      btn.classList.toggle("active", navRoute === state.route || (state.route === "visitlive" && navRoute === "rep") || (state.route === "weeklybrief" && navRoute === "managerreview") || (state.route === "scaleplan" && navRoute === "pilot"));
     });
 
     var view = "";
@@ -3253,6 +3500,7 @@
     else if (state.route === "coaching") view = renderCoaching();
     else if (state.route === "cockpit") view = renderCockpit();
     else if (state.route === "pilot") view = renderPilot();
+    else if (state.route === "scaleplan") view = renderScaleExecutionPlan();
     else if (state.route === "learning") view = renderLearning();
     else if (state.route === "guardrails") view = renderGuardrails();
     else if (state.route === "admin") view = renderAdmin();
@@ -3542,6 +3790,55 @@
           showToast("当前还没有 Weekly Decision Brief");
           return;
         }
+        state.route = "weeklybrief";
+        saveState();
+        render();
+        window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-open-scale-plan]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (!state.scaleExecutionPlan) {
+          showToast("当前没有 Scale Execution Plan");
+          return;
+        }
+        state.role = "销售总监";
+        state.route = "scaleplan";
+        saveState();
+        render();
+        window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-scale-phase]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.scaleExecutionPhase = el.getAttribute("data-scale-phase") || "d30";
+        saveState();
+        render();
+      });
+    });
+
+    $$("[data-scale-plan-task]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var id = el.getAttribute("data-scale-plan-task");
+        state.scaleExecutionChecks[id] = !state.scaleExecutionChecks[id];
+        saveState();
+        render();
+      });
+    });
+
+    $$("[data-scale-plan-regenerate]").forEach(function (el) {
+      el.addEventListener("click", regenerateScaleExecutionPlan);
+    });
+
+    $$("[data-scale-plan-executive]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (!state.weeklyDecisionBrief) {
+          showToast("还没有 Executive Brief");
+          return;
+        }
+        state.briefMode = "executive";
         state.route = "weeklybrief";
         saveState();
         render();
