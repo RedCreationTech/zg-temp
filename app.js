@@ -1080,11 +1080,11 @@
       });
     });
 
-    $("[data-start-tour]").forEach(function (el) {
+    $$("[data-start-tour]").forEach(function (el) {
       el.addEventListener("click", function () { startDemoTour(); });
     });
 
-    $("[data-reset-prototype]").forEach(function (el) {
+    $$("[data-reset-prototype]").forEach(function (el) {
       el.addEventListener("click", resetFrontendPrototype);
     });
 
