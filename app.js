@@ -10,6 +10,7 @@
     doctor: "医生导航",
     coaching: "拜访辅导",
     cockpit: "总监驾驶舱",
+    pilot: "Pilot 运营",
     learning: "组织学习",
     guardrails: "合规与安全"
   };
@@ -30,7 +31,9 @@
     coachingTab: "review",
     actionFilter: "all",
     selectedAction: null,
-    actionStatus: saved.actionStatus || {}
+    actionStatus: saved.actionStatus || {},
+    customRules: saved.customRules || [],
+    session: saved.session || null
   };
 
   var $ = function (selector, root) { return (root || document).querySelector(selector); };
@@ -43,7 +46,9 @@
       selectedHospital: state.selectedHospital,
       selectedDoctor: state.selectedDoctor,
       selectedVisit: state.selectedVisit,
-      actionStatus: state.actionStatus
+      actionStatus: state.actionStatus,
+      customRules: state.customRules,
+      session: state.session
     }));
   }
 
@@ -217,7 +222,8 @@
       '<div class="grid-equal mt-16">' +
         panel("医院 NBA", "谁负责、何时切入、做什么、为什么做、成功信号", nba) +
         panel("作战闭环", "目标: " + h.target, timeline) +
-      '</div>';
+      '</div>' +
+      '<div class="mt-16">' + renderHospitalEcology(h) + '</div>';
   }
 
   function renderDoctor() {
@@ -248,6 +254,7 @@
             panel("下一次拜访脚本", "围绕 WHY → WHEN → WHAT → HOW → NEXT", '<div class="script-box"><span class="label">AI RECOMMENDED TALK TRACK</span>' + script + '</div>') +
             panel("核心证据包", "来源可追溯, 医学审核通过", '<div class="evidence-list">' + evidence + '</div><button class="btn primary full mt-12" data-custom-action="visit-start">开始拜访演示</button>') +
           '</div>' +
+          '<div class="mt-16">' + renderDoctorJourney(doc) + '</div>' +
         '</div>' +
       '</div>';
   }
@@ -289,7 +296,8 @@
           '<div class="insight-card"><div class="insight-head"><strong>' + esc(v.issue) + '</strong><span class="insight-tag">TOP 1</span></div><p>' + esc(v.summary) + '</p></div><div class="divider"></div><div class="flex-between"><span class="small-note">系统将改进点映射到下一次真实拜访</span><button class="btn soft" data-custom-action="coach">生成辅导 NBA</button></div>'
         ) +
       '</div>' +
-      '<section class="panel mt-16"><div class="panel-head"><div class="panel-title"><div><h3>结构化辅导工作台</h3><span>复盘 → 诊断 → 改进 → 演练 → 跟进</span></div></div></div><div class="panel-body"><div class="section-tabs">' + tabs + '</div>' + tabBody + '</div></section>';
+      '<section class="panel mt-16"><div class="panel-head"><div class="panel-title"><div><h3>结构化辅导工作台</h3><span>复盘 → 诊断 → 改进 → 演练 → 跟进</span></div></div></div><div class="panel-body"><div class="section-tabs">' + tabs + '</div>' + tabBody + '</div></section>' +
+      '<div class="mt-16">' + renderVoiceReview(v) + '</div>';
   }
 
   function renderCockpit() {
@@ -330,12 +338,13 @@
   }
 
   function renderLearning() {
-    var validated = data.rules.filter(function (r) { return r.status === "validated"; }).length;
-    var cards = data.rules.map(function (r) {
+    var allRules = data.rules.concat(state.customRules || []);
+    var validated = allRules.filter(function (r) { return r.status === "validated"; }).length;
+    var cards = allRules.map(function (r) {
       return '<div class="rule-card"><div class="rule-head"><span class="rule-id">' + esc(r.id) + '</span><span class="status ' + (r.status === "validated" ? "done" : "doing") + '">' + (r.status === "validated" ? "已验证" : "验证中") + '</span></div><h4>' + esc(r.title) + '</h4><div class="rule-chain"><div class="rule-cell"><b>CONTEXT</b><span>' + esc(r.context) + '</span></div><div class="rule-cell"><b>DECISION</b><span>' + esc(r.decision) + '</span></div><div class="rule-cell"><b>ACTION</b><span>' + esc(r.action) + '</span></div><div class="rule-cell"><b>OUTCOME</b><span>' + esc(r.outcome) + '</span></div></div><div class="rule-foot"><span class="confidence">置信度 <strong>' + r.confidence + '%</strong> · 已调用 ' + r.uses + ' 次</span><button class="tiny-btn" data-rule="' + r.id + '">查看证据</button></div></div>';
     }).join("");
 
-    return '<div class="page-banner"><div><span class="banner-kicker">LEARNING ENGINE</span><h2>把冠军打法从个人经验变成组织资产</h2><p>每一个有效或无效的下一步行动, 都回流为 Context → Decision → Action → Outcome 证据, 持续更新 Decision Rules.</p></div><div class="banner-side"><strong>' + validated + '/' + data.rules.length + '</strong><span>当前规则已验证</span></div></div>' +
+    return '<div class="page-banner"><div><span class="banner-kicker">LEARNING ENGINE</span><h2>把冠军打法从个人经验变成组织资产</h2><p>每一个有效或无效的下一步行动, 都回流为 Context → Decision → Action → Outcome 证据, 持续更新 Decision Rules.</p></div><div class="banner-side"><strong>' + validated + '/' + allRules.length + '</strong><span>当前规则已验证</span></div></div>' +
       '<div class="learning-summary">' +
         metric("规则总量", "128", "本月新增 11 条", "+11", "R") +
         metric("已验证", "84", "跨区域重复成立", "+6", "验") +
@@ -343,7 +352,8 @@
         metric("规则复用率", "71%", "进入 NBA 判断流程", "+9%", "%") +
       '</div>' +
       panel("Decision Rules", "AI 不只记住内容, 更沉淀情境下的判断规则",
-        '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px" class="rule-grid">' + cards + '</div>'
+        '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px" class="rule-grid">' + cards + '</div>',
+        '<button class="btn soft" id="newRuleBtn">+ 新建 Rule</button>'
       ) +
       '<div class="grid-equal mt-16">' +
         panel("本周学习事件", "哪些 Outcome 正在改变规则",
@@ -353,6 +363,186 @@
           '<div class="insight-card"><div class="insight-head"><strong>FACT</strong><span class="insight-tag">可追溯</span></div><p>真实行动、医生反馈、业务里程碑、知识证据.</p></div><div class="insight-card"><div class="insight-head"><strong>INFERENCE</strong><span class="insight-tag">需验证</span></div><p>Agent 对情境、优先级、因果关系的推断必须带置信度和验证计划.</p></div><div class="insight-card"><div class="insight-head"><strong>HUMAN REVIEW</strong><span class="insight-tag">关键门槛</span></div><p>高风险 NBA、医学边界和规则正式发布必须经过授权角色审核.</p></div>'
         ) +
       '</div>';
+  }
+
+
+  function renderHospitalEcology(h) {
+    var name = esc(h.name);
+    var map =
+      '<div class="ecology-map">' +
+        '<div class="eco-line" style="left:50%;top:50%;width:27%;transform:rotate(-32deg)"></div>' +
+        '<div class="eco-line" style="left:28%;top:28%;width:28%;transform:rotate(46deg)"></div>' +
+        '<div class="eco-line" style="left:50%;top:50%;width:28%;transform:rotate(28deg)"></div>' +
+        '<div class="eco-line" style="left:50%;top:50%;width:31%;transform:rotate(151deg)"></div>' +
+        '<div class="eco-line" style="left:50%;top:50%;width:25%;transform:rotate(206deg)"></div>' +
+        '<button class="eco-node primary" style="left:50%;top:50%"><strong>' + name + '</strong><span>' + esc(h.department) + '</span><small>当前作战中心</small></button>' +
+        '<button class="eco-node key" style="left:28%;top:27%"><strong>周主任</strong><span>科室决策者</span><small>影响力 94</small></button>' +
+        '<button class="eco-node key" style="left:75%;top:27%"><strong>治疗组</strong><span>4 位核心医生</span><small>关键执行层</small></button>' +
+        '<button class="eco-node" style="left:78%;top:70%"><strong>医学部</strong><span>证据支持</span><small>资源方</small></button>' +
+        '<button class="eco-node" style="left:23%;top:72%"><strong>准入 / 药学</strong><span>流程影响者</span><small>协同角色</small></button>' +
+      '</div>' +
+      '<div class="eco-legend"><span><i class="a"></i>作战中心</span><span><i class="b"></i>关键影响者</span><span><i class="c"></i>协同角色</span><span>点击节点查看关系和建议动作</span></div>';
+    return panel("医院生态关系图", "从“名单”升级为决策链、影响关系与资源协同图", map);
+  }
+
+  function renderDoctorJourney(doc) {
+    var journey =
+      '<div class="journey-line">' +
+        '<div class="journey-step done"><div class="journey-dot">01</div><div><b>患者识别</b><span>已建立共同语言</span></div></div>' +
+        '<div class="journey-step done"><div class="journey-dot">02</div><div><b>诊断判断</b><span>证据接受度较高</span></div></div>' +
+        '<div class="journey-step active"><div class="journey-dot">03</div><div><b>方案选择</b><span>' + esc(doc.stage) + '</span></div></div>' +
+        '<div class="journey-step"><div class="journey-dot">04</div><div><b>治疗执行</b><span>等待行为承诺</span></div></div>' +
+        '<div class="journey-step"><div class="journey-dot">05</div><div><b>随访管理</b><span>未来追踪</span></div></div>' +
+      '</div>' +
+      '<div class="touchpoint-list mt-16">' +
+        '<div class="touchpoint"><time>09.18</time><div><strong>学术沟通</strong><p>医生明确提出“患者到底怎么选”的疑问, 形成新的触发信号.</p></div><span class="status doing">关键</span></div>' +
+        '<div class="touchpoint"><time>09.11</time><div><strong>资料跟进</strong><p>指南和真实世界数据已阅读, 但尚未绑定具体患者场景.</p></div><span class="status done">完成</span></div>' +
+        '<div class="touchpoint"><time>08.28</time><div><strong>首次深度拜访</strong><p>确认其主要关注长期获益与安全性平衡.</p></div><span class="status done">完成</span></div>' +
+      '</div>';
+    return panel("医生决策旅程", "把互动历史放回医生真实决策路径, 识别最值得切入的时机", journey,
+      '<button class="btn soft" data-ai-generate="doctor">AI 重新判断下一步</button>');
+  }
+
+  function renderVoiceReview(v) {
+    var body =
+      '<label class="upload-zone" for="visitAudio">' +
+        '<input id="visitAudio" type="file" accept="audio/*,.m4a,.mp3,.wav">' +
+        '<div class="upload-icon">REC</div><strong>上传拜访录音 / 语音复盘</strong><span>支持 m4a、mp3、wav. 原型会模拟转写、关键片段识别与辅导诊断.</span>' +
+      '</label>' +
+      '<div class="flex-between mt-12"><span class="small-note">当前对象: ' + esc(v.rep) + ' → ' + esc(v.doctor) + '</span><button class="tiny-btn" id="demoVoiceBtn">使用演示录音</button></div>';
+    return panel("语音复盘入口", "说完即记录 → 转写 → 结构化诊断 → 生成下一次行动", body);
+  }
+
+  function renderPilot() {
+    var weeks = [
+      ["W1","启动","done"],["W2","诊断","done"],["W3","运行","done"],["W4","运行","active"],
+      ["W5","运行",""],["W6","运行",""],["W7","复盘",""],["W8","扩展",""]
+    ].map(function (w) {
+      return '<div class="week-item ' + w[2] + '"><b>' + w[0] + '</b><span>' + w[1] + '</span></div>';
+    }).join("");
+
+    var table =
+      '<table class="pilot-table"><thead><tr><th>验证目标</th><th>本周</th><th>8 周目标</th><th>状态</th></tr></thead><tbody>' +
+      '<tr><td>经理周活跃率</td><td>84%</td><td>≥ 80%</td><td><span class="health-pill">达标</span></td></tr>' +
+      '<tr><td>NBA 采纳率</td><td>76%</td><td>≥ 70%</td><td><span class="health-pill">达标</span></td></tr>' +
+      '<tr><td>行动完成率</td><td>68%</td><td>≥ 75%</td><td><span class="health-pill warn">需提升</span></td></tr>' +
+      '<tr><td>Review 覆盖率</td><td>71%</td><td>≥ 70%</td><td><span class="health-pill">达标</span></td></tr>' +
+      '<tr><td>Rule 有效复用</td><td>6 条</td><td>≥ 8 条</td><td><span class="health-pill warn">验证中</span></td></tr>' +
+      '</tbody></table>';
+
+    return '<div class="page-banner"><div><span class="banner-kicker">8-WEEK PAID PILOT</span><h2>不是“上线一个 AI”, 而是验证一套行动系统</h2><p>同时验证 Market Proof 与 Product Proof: 客户愿意付费、经理愿意使用、行动能被追踪、结果能回流、规则能学习.</p></div><div class="banner-side"><strong>W4</strong><span>当前运行周</span></div></div>' +
+      '<div class="week-track">' + weeks + '</div>' +
+      '<div class="metric-grid mt-16">' +
+        metric("试点医院", "3", "均已进入周度 GPS", "", "院") +
+        metric("活跃用户", "28", "代表 21 / 经理 6 / 总监 1", "+4", "人") +
+        metric("累计 NBA", "96", "本周新增 24", "+24", "A") +
+        metric("有效 Rule", "6", "由真实 Outcome 验证", "+2", "R") +
+      '</div>' +
+      '<div class="pilot-grid">' +
+        panel("价值漏斗", "从“AI 给建议”一直追到业务结果",
+          '<div class="funnel"><div class="funnel-step"><strong>96</strong><span>NBA 生成</span><b>100%</b></div><div class="funnel-step"><strong>73</strong><span>被一线采纳</span><b>76%</b></div><div class="funnel-step"><strong>65</strong><span>形成执行</span><b>68%</b></div><div class="funnel-step"><strong>41</strong><span>产生 Outcome</span><b>43%</b></div></div><div class="divider"></div><p class="small-note">重点不是追求生成量, 而是持续提高 NBA → Action → Outcome 的转化质量.</p>'
+        ) +
+        panel("Pilot Gate", "W8 是否扩展由这些可量化证据决定", table) +
+      '</div>' +
+      '<div class="grid-equal mt-16">' +
+        panel("本周运营动作", "GPS Operations",
+          '<div class="timeline"><div class="timeline-item done"><span class="timeline-dot"></span><b>周一 · 更新医院 Context</b><span>数据、关键事件、医生变化和资源约束.</span></div><div class="timeline-item"><span class="timeline-dot"></span><b>周三 · 中期 Action Review</b><span>检查高优先 NBA 是否真正进入执行.</span></div><div class="timeline-item"><span class="timeline-dot"></span><b>周五 · Outcome & Rule Review</b><span>复盘有效/无效判断, 更新候选规则.</span></div></div>'
+        ) +
+        panel("扩展准备度", "Land → Prove → Expand → Operate",
+          '<div class="dimension-row"><span>Market Proof</span><div class="bar"><i style="width:79%"></i></div><b>79%</b></div><div class="dimension-row"><span>Product Proof</span><div class="bar"><i style="width:74%"></i></div><b>74%</b></div><div class="dimension-row"><span>Data Readiness</span><div class="bar"><i style="width:86%"></i></div><b>86%</b></div><div class="dimension-row"><span>Scale Readiness</span><div class="bar"><i style="width:63%"></i></div><b>63%</b></div><button class="btn primary full mt-12" data-ai-generate="cockpit">生成本周 Pilot 决策简报</button>'
+        ) +
+      '</div>';
+  }
+
+  function startAIGeneration(type) {
+    var titleMap = { hospital: "医院作战 AI 生成", doctor: "医生下一步 AI 生成", coaching: "拜访辅导 AI 生成", cockpit: "管理决策 AI 生成" };
+    var body =
+      '<div class="ai-stream"><div class="ai-stream-head"><strong>Decision Engine 正在生成</strong><span class="stream-status"><i class="stream-dot"></i>Streaming</span></div><p id="streamText"></p><div class="ai-stream-actions"><button class="btn primary" id="adoptGenerated" disabled>采纳为下一步行动</button></div></div>' +
+      '<div class="drawer-section mt-16"><h4>生成依据</h4><p class="small-note">企业数据、当前角色、医院/医生 Context、历史动作、医学知识与 Decision Rules. 当前版本通过 Mock API 模拟, 接真实服务时页面调用接口保持不变.</p></div>';
+    openDrawer(titleMap[type] || "AI 生成", body, null);
+    var target = $("#streamText");
+    var adopt = $("#adoptGenerated");
+    window.ZG_API.generateNBA(type, { route: state.route, role: state.role }, function (token, done) {
+      if (target) target.textContent += token;
+      if (done && adopt) {
+        adopt.disabled = false;
+        var status = $(".stream-status");
+        if (status) status.innerHTML = "✓ 生成完成";
+      }
+    }).then(function () {
+      if (adopt) adopt.addEventListener("click", function () {
+        closeDrawer();
+        showToast("AI 建议已采纳并进入执行队列");
+      });
+    });
+  }
+
+  function openRuleEditor() {
+    var body =
+      '<div class="rule-form">' +
+        '<div class="rule-form-grid"><div><label>Rule 标题</label><input id="ruleTitle" placeholder="例如: 先确认决策标准再呈现证据"></div><div><label>初始置信度</label><input id="ruleConfidence" type="number" min="0" max="100" value="60"></div></div>' +
+        '<div><label>CONTEXT</label><textarea id="ruleContext" placeholder="什么情境下成立"></textarea></div>' +
+        '<div><label>DECISION</label><textarea id="ruleDecision" placeholder="应该做出什么判断"></textarea></div>' +
+        '<div><label>ACTION</label><textarea id="ruleAction" placeholder="对应什么动作"></textarea></div>' +
+        '<div><label>OUTCOME</label><textarea id="ruleOutcome" placeholder="用什么结果验证"></textarea></div>' +
+        '<div class="rule-actions"><button class="btn ghost" id="cancelRule">取消</button><button class="btn primary" id="saveRule">保存为验证中 Rule</button></div>' +
+      '</div>';
+    openDrawer("新建 Decision Rule", body, null);
+    $("#cancelRule").addEventListener("click", closeDrawer);
+    $("#saveRule").addEventListener("click", async function () {
+      var title = $("#ruleTitle").value.trim();
+      if (!title) { showToast("请填写 Rule 标题"); return; }
+      var result = await window.ZG_API.saveRule({
+        title: title,
+        context: $("#ruleContext").value.trim() || "待补充 Context",
+        decision: $("#ruleDecision").value.trim() || "待验证 Decision",
+        action: $("#ruleAction").value.trim() || "待验证 Action",
+        outcome: $("#ruleOutcome").value.trim() || "等待 Outcome",
+        confidence: $("#ruleConfidence").value,
+        status: "testing",
+        uses: 0
+      });
+      state.customRules.unshift(result.rule);
+      saveState();
+      closeDrawer();
+      render();
+      showToast("新 Rule 已进入验证队列");
+    });
+  }
+
+  async function processVisitAudio(file) {
+    showToast("正在转写并识别关键片段");
+    var result = await window.ZG_API.transcribeVisit(file || { name: "demo-visit.m4a" });
+    var transcript = result.transcript.map(function (x) {
+      return '<div class="transcript-item"><span class="speaker">' + esc(x.speaker) + '</span><time>' + esc(x.time) + '</time><p>' + esc(x.text) + '</p></div>';
+    }).join("");
+    var body =
+      '<div class="drawer-section"><h4>自动转写 · ' + esc(result.duration) + '</h4><div class="transcript-list">' + transcript + '</div></div>' +
+      '<div class="drawer-section"><h4>AI 诊断</h4><div class="drawer-callout"><strong>' + esc(result.diagnosis.topIssue) + ' · ' + result.diagnosis.score + ' 分</strong><p>' + esc(result.diagnosis.evidence) + '</p></div></div>' +
+      '<div class="drawer-success"><span>→</span><span>' + esc(result.diagnosis.nextAction) + '</span></div>';
+    openDrawer("语音复盘结果", body, null);
+  }
+
+  function ensureLogin() {
+    if (state.session) return;
+    var wrap = document.createElement("div");
+    wrap.className = "login-screen";
+    wrap.id = "loginScreen";
+    wrap.innerHTML =
+      '<div class="login-card"><section class="login-intro"><div class="brand-mark">ZG</div><span class="eyebrow" style="color:#9db4ef">PHARMA SALES AI GPS</span><h1>让每一次销售判断<br>落到下一步行动</h1><p>连接医院策略、医生行动、拜访辅导与管理决策, 用 Action → Outcome → Learning 把经验变成组织能力.</p><div class="login-flow"><div><b>01 CONTEXT</b><span>看清机会</span></div><div><b>02 NBA</b><span>做对下一步</span></div><div><b>03 LEARNING</b><span>越做越准</span></div></div></section><section class="login-form"><span class="eyebrow">DEMO WORKSPACE</span><h2>进入客户拜访演示环境</h2><p>使用脱敏数据体验完整的 System of Action 闭环.</p><div class="login-field"><label>姓名</label><input id="loginName" value="李明"></div><div class="login-field"><label>角色</label><select id="loginRole"><option>地区经理</option><option>医药代表</option><option>销售总监</option></select></div><button class="btn primary full" id="loginSubmit">进入 AI GPS</button><span class="login-hint">演示环境不会连接真实客户数据. 登录信息仅保存在当前浏览器 localStorage.</span></section></div>';
+    document.body.appendChild(wrap);
+    $("#loginSubmit").addEventListener("click", function () {
+      var role = $("#loginRole").value;
+      state.role = role;
+      state.session = { name: $("#loginName").value.trim() || "演示用户", role: role, loginAt: new Date().toISOString() };
+      if (role === "销售总监") state.route = "cockpit";
+      else if (role === "医药代表") state.route = "doctor";
+      else state.route = "dashboard";
+      saveState();
+      wrap.classList.add("hidden");
+      render();
+      showToast("欢迎进入 " + role + " 工作视角");
+    });
   }
 
   function renderGuardrails() {
@@ -390,6 +580,7 @@
     else if (state.route === "doctor") view = renderDoctor();
     else if (state.route === "coaching") view = renderCoaching();
     else if (state.route === "cockpit") view = renderCockpit();
+    else if (state.route === "pilot") view = renderPilot();
     else if (state.route === "learning") view = renderLearning();
     else if (state.route === "guardrails") view = renderGuardrails();
     else view = renderDashboard();
@@ -451,16 +642,38 @@
       });
     });
 
-    $$("[data-rule]").forEach(function (el) {
+    $("[data-rule]").forEach(function (el) {
       el.addEventListener("click", function () {
         openCustom("rule", el.getAttribute("data-rule"));
       });
     });
 
+    $("[data-ai-generate]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        startAIGeneration(el.getAttribute("data-ai-generate"));
+      });
+    });
+
+    var newRule = $("#newRuleBtn");
+    if (newRule) newRule.addEventListener("click", openRuleEditor);
+
+    var audio = $("#visitAudio");
+    if (audio) audio.addEventListener("change", function () {
+      if (audio.files && audio.files[0]) processVisitAudio(audio.files[0]);
+    });
+
+    var demoVoice = $("#demoVoiceBtn");
+    if (demoVoice) demoVoice.addEventListener("click", function () { processVisitAudio(null); });
+
+    $(".eco-node").forEach(function (el) {
+      el.addEventListener("click", function () {
+        showToast(el.querySelector("strong").textContent + " · 已定位关系节点");
+      });
+    });
+
     var gen = $("#generateNba");
     if (gen) gen.addEventListener("click", function () {
-      showToast("AI 已基于最新 Context 重新计算优先级");
-      setTimeout(function () { openAction("a1"); }, 260);
+      startAIGeneration("cockpit");
     });
   }
 
@@ -631,5 +844,6 @@
     if (event.key === "Escape") closeDrawer();
   });
 
+  ensureLogin();
   render();
 })();
