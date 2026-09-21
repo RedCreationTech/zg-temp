@@ -53,13 +53,13 @@
   };
 
   var DEMO_TOUR = [
-    { route: "dashboard", kicker: "01 / ACTION", title: "先看今天真正值得做什么", desc: "AI GPS 不是把数据再展示一遍, 而是把医院、医生和拜访信号收敛成少数高优先 NBA." },
-    { route: "hospital", kicker: "02 / HOSPITAL", title: "找到医院最值得打的业务杠杆", desc: "从机会价值和可改变程度出发, 避免平均投入, 形成 WHO / WHEN / WHAT / SUCCESS." },
-    { route: "doctor", kicker: "03 / DOCTOR", title: "把医院策略落到一次医生行动", desc: "围绕真实触发场景判断为什么现在打、说什么、怎么推进以及目标行为." },
-    { route: "coaching", kicker: "04 / COACHING", title: "复盘一次失效拜访并替换关键动作", desc: "经理看到的不只是评分, 而是下一次拜访具体要改哪句话、检查什么证据." },
-    { route: "cockpit", kicker: "05 / MANAGEMENT", title: "管理层只处理真正需要介入的动作", desc: "加资源、纠偏、升级或停止, 而不是月底再看一张结果报表." },
-    { route: "learning", kicker: "06 / LEARNING", title: "让真实 Outcome 回流为组织判断能力", desc: "有效和无效动作形成 RuleValidation, 高风险规则仍保留 Human Review." },
-    { route: "pilot", kicker: "07 / PILOT", title: "最后用 8 周 Pilot 验证产品价值", desc: "验证客户愿意用、行动真的发生、结果能回流, 再决定扩展到更多 Agent 和区域." }
+    { role: "地区经理", route: "dashboard", kicker: "01 / ACTION", title: "先看今天真正值得做什么", desc: "AI GPS 不是把数据再展示一遍, 而是把医院、医生和拜访信号收敛成少数高优先 NBA." },
+    { role: "地区经理", route: "hospital", kicker: "02 / HOSPITAL", title: "找到医院最值得打的业务杠杆", desc: "从机会价值和可改变程度出发, 避免平均投入, 形成 WHO / WHEN / WHAT / SUCCESS." },
+    { role: "医药代表", route: "doctor", kicker: "03 / DOCTOR", title: "把医院策略落到一次医生行动", desc: "围绕真实触发场景判断为什么现在打、说什么、怎么推进以及目标行为." },
+    { role: "地区经理", route: "coaching", kicker: "04 / COACHING", title: "复盘一次失效拜访并替换关键动作", desc: "经理看到的不只是评分, 而是下一次拜访具体要改哪句话、检查什么证据." },
+    { role: "销售总监", route: "cockpit", kicker: "05 / MANAGEMENT", title: "管理层只处理真正需要介入的动作", desc: "加资源、纠偏、升级或停止, 而不是月底再看一张结果报表." },
+    { role: "销售总监", route: "learning", kicker: "06 / LEARNING", title: "让真实 Outcome 回流为组织判断能力", desc: "有效和无效动作形成 RuleValidation, 高风险规则仍保留 Human Review." },
+    { role: "销售总监", route: "pilot", kicker: "07 / PILOT", title: "最后用 8 周 Pilot 验证产品价值", desc: "验证客户愿意用、行动真的发生、结果能回流, 再决定扩展到更多 Agent 和区域." }
   ];
 
   var saved = {};
@@ -256,7 +256,7 @@
     state.demoTourActive = true;
     state.demoTourStep = 0;
     var s = SCENARIOS[state.demoScenario] || SCENARIOS.hospital_attack;
-    state.role = s.role;
+    state.role = DEMO_TOUR[0].role || s.role;
     state.selectedHospital = s.hospitalId;
     state.selectedDoctor = s.doctorId;
     state.selectedVisit = s.visitId;
@@ -280,6 +280,7 @@
       return;
     }
     state.demoTourStep = next;
+    state.role = DEMO_TOUR[next].role || state.role;
     navigate(DEMO_TOUR[next].route);
     updateDemoTourShell();
   }
@@ -294,7 +295,7 @@
 
     var step = DEMO_TOUR[state.demoTourStep];
     $("#demoTourKicker").textContent = step.kicker;
-    $("#demoTourTitle").textContent = step.title;
+    $("#demoTourTitle").textContent = step.title + " · " + step.role;
     $("#demoTourDesc").textContent = step.desc;
     $("#demoTourPrev").disabled = state.demoTourStep === 0;
     $("#demoTourNext").textContent = state.demoTourStep === DEMO_TOUR.length - 1 ? "完成演示" : "下一步";
