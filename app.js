@@ -946,10 +946,15 @@
       ? '<div class="roleplay-result ' + (last.score >= 85 ? "good" : (last.score >= 65 ? "mid" : "bad")) + '"><div class="roleplay-score"><strong>' + last.score + '</strong><span>本轮得分</span></div><div><span>医生回应</span><p>“' + esc(last.reply) + '”</p><b>' + esc(last.feedback) + '</b></div></div>'
       : '<div class="roleplay-hint">选择一句你准备现场说的话, AI 会模拟医生回应并立即评分.</div>';
 
+    var practiceProof = session.completed
+      ? '<div class="practice-proof"><span>MANAGER CHECK EVIDENCE</span><strong>AI 陪练已完成 · Best ' + best + ' · 共 ' + attempts + ' 轮</strong><p>本次已围绕 “' + esc(v.issue) + '” 完成关键句练习, 可作为下一次拜访前的经理检查证据.</p></div>'
+      : "";
+
     return panel("AI 角色扮演", "医生由 AI 模拟, 只练本次 Top 1 问题: " + v.issue,
       '<div class="roleplay-head"><div><span>DOCTOR</span><strong>“' + esc(config.doctor) + '”</strong><p>训练目标: ' + esc(config.target) + '</p></div><div class="roleplay-stats"><span>已练 ' + attempts + ' 轮</span><strong>Best ' + best + '</strong></div></div>' +
       '<div class="roleplay-choices">' + choices + '</div>' +
       result +
+      practiceProof +
       (last ? '<div class="roleplay-actions"><button class="btn ghost" data-roleplay-retry>再打一遍</button><button class="btn primary" data-roleplay-complete ' + (best < 85 ? "disabled" : "") + '>' + (session.completed ? "✓ 陪练已完成" : "完成陪练, 锁定下一次打法") + '</button></div>' : '')
     );
   }
