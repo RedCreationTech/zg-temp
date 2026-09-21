@@ -3223,7 +3223,7 @@
       });
     });
 
-    $("[data-brief-mode]").forEach(function (el) {
+    $$("[data-brief-mode]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.briefMode = el.getAttribute("data-brief-mode") || "manager";
         saveState();
@@ -3232,7 +3232,7 @@
       });
     });
 
-    $("[data-brief-regenerate]").forEach(function (el) {
+    $$("[data-brief-regenerate]").forEach(function (el) {
       el.addEventListener("click", regenerateWeeklyDecisionBrief);
     });
 
