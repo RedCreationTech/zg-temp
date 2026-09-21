@@ -14,6 +14,7 @@
     managerreview: "周度 Review",
     weeklybrief: "Weekly Decision Brief",
     scaleplan: "Scale Execution Plan",
+    portfolio: "Scale Portfolio",
     coaching: "拜访辅导",
     cockpit: "总监驾驶舱",
     pilot: "Pilot 运营",
@@ -115,6 +116,10 @@
     scaleSecondWaveRamp: saved.scaleSecondWaveRamp || { hospitals:{}, reps:{} },
     scaleValueEvidence: saved.scaleValueEvidence || {},
     scaleRepeatabilityEvidence: saved.scaleRepeatabilityEvidence || {},
+    scalePortfolioSelected: saved.scalePortfolioSelected || "east2",
+    scalePortfolioFilter: saved.scalePortfolioFilter || "all",
+    scalePortfolioResourcePlan: saved.scalePortfolioResourcePlan || {},
+    scalePortfolioPatternRollout: saved.scalePortfolioPatternRollout || {},
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -181,6 +186,10 @@
       scaleSecondWaveRamp: state.scaleSecondWaveRamp,
       scaleValueEvidence: state.scaleValueEvidence,
       scaleRepeatabilityEvidence: state.scaleRepeatabilityEvidence,
+      scalePortfolioSelected: state.scalePortfolioSelected,
+      scalePortfolioFilter: state.scalePortfolioFilter,
+      scalePortfolioResourcePlan: state.scalePortfolioResourcePlan,
+      scalePortfolioPatternRollout: state.scalePortfolioPatternRollout,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -3567,6 +3576,288 @@
     '</div>';
   }
 
+
+  function portfolioEffortPenalty(effort) {
+    return effort === "低" ? 10 : (effort === "中" ? 28 : 46);
+  }
+
+  function portfolioStageMeta(stage) {
+    return {
+      pilot:{ label:"Pilot 验证", cls:"pilot" },
+      launch:{ label:"Launch", cls:"launch" },
+      value:{ label:"Value", cls:"value" },
+      repeatability:{ label:"Repeatability", cls:"repeat" },
+      proven:{ label:"Scale Proven", cls:"proven" },
+      candidate:{ label:"候选区域", cls:"candidate" }
+    }[stage] || { label:stage || "候选区域", cls:"candidate" };
+  }
+
+  function portfolioActiveTargetId() {
+    return state.scaleExecutionPlan && state.scaleExecutionPlan.targetId
+      ? state.scaleExecutionPlan.targetId
+      : null;
+  }
+
+  function scalePortfolioRegions() {
+    var pm = computePilotMetrics();
+    var gate = scaleGateModel();
+    var repeatCriterion = gate.criteria.find(function(x){return x.id === "repeatability";});
+    var activeTarget = portfolioActiveTargetId();
+    var plan = state.scaleExecutionPlan;
+    var overall = plan ? overallScalePlanProgress(plan) : { pct:0 };
+    var activeRisks = plan ? scaleExecutionRiskRegister(plan).length : 0;
+    var valueProof = scaleEvidenceStatus("value");
+    var repeatProof = scaleEvidenceStatus("repeatability");
+    var ramp = plan ? secondWaveRampStats(plan) : { pct:0,productive:0 };
+    var g30 = state.scaleExecutionGateReviews.g30;
+    var g60 = state.scaleExecutionGateReviews.g60;
+    var g90 = state.scaleExecutionGateReviews.g90;
+
+    var regions = [{
+      id:"pilot-east1",
+      name:"华东一区",
+      type:"current",
+      stage:"pilot",
+      similarity:100,
+      data:94,
+      execution:Math.min(100,Math.round((pm.actionCompletion + pm.reviewCoverage) / 2)),
+      value:Math.min(100,Math.round((pm.marketProof + pm.productProof + pm.outcomeRate) / 3)),
+      repeatability:repeatCriterion ? repeatCriterion.score : 0,
+      risks:Math.max(0,3-Number(pm.resolved || 0)),
+      resource:78,
+      hospitals:3,
+      reps:5,
+      note:"当前 8 周 Pilot 区域, 是后续复制的基准样本.",
+      next:"保持每周 Outcome / Rule Review, 持续产出可复制证据."
+    }];
+
+    scaleGateTargets().forEach(function(t){
+      var isActive = activeTarget === t.id;
+      var stage = "candidate";
+      var execution = 0;
+      var value = null;
+      var repeatability = null;
+      var risks = 0;
+      var resource = Math.max(30,Math.round(86 - t.data/2 + portfolioEffortPenalty(t.effort)/2));
+      var note = t.reason;
+      var next = "补齐数据准备和场景匹配, 等待下一次 Scale Gate.";
+
+      if (isActive && plan) {
+        if (g90 && g90.status !== "hold") stage = "proven";
+        else if (g60 && g60.status !== "hold") stage = "repeatability";
+        else if (g30 && g30.status !== "hold") stage = "value";
+        else stage = "launch";
+        execution = overall.pct;
+        value = Math.round((t.data + valueProof.pct + Math.min(100,overall.pct+15)) / 3);
+        repeatability = Math.round((t.similarity + repeatProof.pct + ramp.pct) / 3);
+        risks = activeRisks;
+        resource = Math.min(98,58 + (plan.hospitals || []).length*4 + (plan.reps || []).length*3 + Math.round(ramp.pct/8));
+        note = "当前正式扩区执行区域, 指标直接来自 30/60/90 天计划和 Evidence Room.";
+        next = stage === "launch"
+          ? "完成 Launch Gate, 再启动第二批对象."
+          : (stage === "value"
+            ? "完成 Value Evidence, 证明 Action 能改变客户行为."
+            : (stage === "repeatability"
+              ? "验证 Champion Pattern 跨场景复现."
+              : "进入下一轮区域复制决策."));
+      }
+
+      var candidateScore = Math.round(
+        t.similarity * 0.48 +
+        t.data * 0.37 +
+        (100-portfolioEffortPenalty(t.effort)) * 0.15
+      );
+
+      regions.push({
+        id:t.id,
+        name:t.name,
+        type:isActive ? "active" : "candidate",
+        stage:stage,
+        similarity:t.similarity,
+        data:t.data,
+        execution:execution,
+        value:value,
+        repeatability:repeatability,
+        risks:risks,
+        resource:resource,
+        hospitals:scaleTargetProfile(t.id).hospitals.length,
+        reps:scaleTargetProfile(t.id).reps.length,
+        candidateScore:candidateScore,
+        effort:t.effort,
+        note:note,
+        next:next
+      });
+    });
+    return regions;
+  }
+
+  function portfolioCandidateRanking(regions) {
+    var active = portfolioActiveTargetId();
+    return regions.filter(function(r){
+      return r.type === "candidate" && r.id !== active;
+    }).sort(function(a,b){
+      return Number(b.candidateScore || 0)-Number(a.candidateScore || 0);
+    });
+  }
+
+  function portfolioPatternStep(regionId) {
+    if (regionId === "pilot-east1") return 3;
+    return Math.max(0,Math.min(3,Number((state.scalePortfolioPatternRollout || {})[regionId] || 0)));
+  }
+
+  function portfolioPatternLabel(step) {
+    return ["未开始","场景匹配","小样本验证","已复现"][Math.max(0,Math.min(3,Number(step || 0)))];
+  }
+
+  function advancePortfolioPattern(regionId) {
+    if (regionId === "pilot-east1") return;
+    if (!state.scalePortfolioPatternRollout) state.scalePortfolioPatternRollout = {};
+    var next = Math.min(3,portfolioPatternStep(regionId)+1);
+    state.scalePortfolioPatternRollout[regionId] = next;
+    saveState();
+    render();
+    showToast("Champion Pattern · " + portfolioPatternLabel(next));
+  }
+
+  function portfolioResourceDefinitions() {
+    return [
+      { id:"medical", name:"医学支持", capacity:2, note:"证据适配 / 复杂异议 / MDT 场景" },
+      { id:"data", name:"数据运营", capacity:3, note:"主数据 / Outcome / Evidence 数据质量" },
+      { id:"excellence", name:"销售卓越", capacity:2, note:"代表基线 / Coaching / Playbook" },
+      { id:"product", name:"产品运营", capacity:2, note:"Agent 启用 / 规则 / 运行问题" },
+      { id:"manager", name:"区域管理", capacity:3, note:"Weekly Review / Gate / Owner 闭环" }
+    ];
+  }
+
+  function portfolioResourceUsage(resourceId) {
+    var used = 1; // 当前 Pilot 基准区持续占用 1 份核心资源
+    var active = portfolioActiveTargetId();
+    if (active) used += 1;
+    var reserved = (state.scalePortfolioResourcePlan || {})[resourceId];
+    if (reserved && reserved !== active && reserved !== "pilot-east1") used += 1;
+    return used;
+  }
+
+  function togglePortfolioResource(resourceId,regionId) {
+    if (!state.scalePortfolioResourcePlan) state.scalePortfolioResourcePlan = {};
+    if (state.scalePortfolioResourcePlan[resourceId] === regionId) {
+      delete state.scalePortfolioResourcePlan[resourceId];
+      showToast("已取消资源预留");
+    } else {
+      state.scalePortfolioResourcePlan[resourceId] = regionId;
+      showToast("已预留 " + (portfolioResourceDefinitions().find(function(x){return x.id===resourceId;}) || {}).name);
+    }
+    saveState();
+    render();
+  }
+
+  function portfolioResourceConflicts() {
+    return portfolioResourceDefinitions().filter(function(r){
+      return portfolioResourceUsage(r.id) > r.capacity;
+    });
+  }
+
+  function portfolioSelectedRegion(regions) {
+    return regions.find(function(r){return r.id === state.scalePortfolioSelected;})
+      || regions.find(function(r){return r.id === portfolioActiveTargetId();})
+      || regions[0];
+  }
+
+  function renderPortfolioRegionCards(regions) {
+    var filtered = regions.filter(function(r){
+      if (state.scalePortfolioFilter === "active") return r.type === "current" || r.type === "active";
+      if (state.scalePortfolioFilter === "candidate") return r.type === "candidate";
+      if (state.scalePortfolioFilter === "risk") return r.risks > 0 || r.resource >= 80;
+      return true;
+    });
+    return filtered.map(function(r){
+      var stage = portfolioStageMeta(r.stage);
+      var selected = r.id === state.scalePortfolioSelected;
+      var valueText = r.value == null ? "未验证" : r.value + "%";
+      var repeatText = r.repeatability == null ? "未验证" : r.repeatability + "%";
+      return '<button class="portfolio-region-card ' + stage.cls + (selected ? " selected" : "") + '" data-portfolio-region="' + r.id + '">' +
+        '<div class="portfolio-region-head"><div><span>' + esc(stage.label) + '</span><strong>' + esc(r.name) + '</strong></div><b>' + (r.type === "candidate" ? r.candidateScore : r.execution) + '</b></div>' +
+        '<div class="portfolio-bars"><div><span>Data</span><div class="bar"><i style="width:' + r.data + '%"></i></div><b>' + r.data + '%</b></div><div><span>Value</span><div class="bar"><i style="width:' + (r.value == null ? 0 : r.value) + '%"></i></div><b>' + valueText + '</b></div><div><span>Repeat</span><div class="bar"><i style="width:' + (r.repeatability == null ? 0 : r.repeatability) + '%"></i></div><b>' + repeatText + '</b></div></div>' +
+        '<div class="portfolio-region-foot"><span>' + r.hospitals + ' 家医院 · ' + r.reps + ' 名代表</span><span>' + (r.risks ? r.risks + ' 风险' : '无当前风险') + '</span></div></button>';
+    }).join("");
+  }
+
+  function renderPortfolioResourceBoard(selected,regions) {
+    return portfolioResourceDefinitions().map(function(resource){
+      var usage = portfolioResourceUsage(resource.id);
+      var overloaded = usage > resource.capacity;
+      var reservedId = (state.scalePortfolioResourcePlan || {})[resource.id];
+      var reserved = regions.find(function(r){return r.id === reservedId;});
+      var isSelected = reservedId === selected.id;
+      return '<div class="portfolio-resource ' + (overloaded ? "overload" : "") + '"><div><span>' + esc(resource.name) + '</span><strong>' + usage + '/' + resource.capacity + '</strong><small>' + esc(resource.note) + '</small></div><div class="portfolio-resource-status"><b>' + (overloaded ? "容量冲突" : "容量可用") + '</b><span>' + (reserved ? "预留 · " + esc(reserved.name) : "未预留下阶段区域") + '</span></div><button data-portfolio-resource="' + resource.id + '" data-portfolio-resource-region="' + selected.id + '" ' + (selected.id === "pilot-east1" ? "disabled" : "") + '>' + (isSelected ? "取消预留" : "预留给当前区域") + '</button></div>';
+    }).join("");
+  }
+
+  function renderPortfolioPatternBoard(regions) {
+    var playbook = state.teamPlaybook;
+    var title = playbook && playbook.name ? playbook.name : "病例决策前先确认 Context, 再匹配证据并锁定具体承诺";
+    return '<div class="portfolio-pattern-head"><div><span>CHAMPION PATTERN</span><strong>' + esc(title) + '</strong><p>跨区复制不是复制话术, 而是验证相同 Context → Action → Outcome 机制是否成立.</p></div><div><b>' + regions.filter(function(r){return portfolioPatternStep(r.id)===3;}).length + '/' + regions.length + '</b><span>区域已复现</span></div></div>' +
+      '<div class="portfolio-pattern-grid">' + regions.map(function(r){
+        var step = portfolioPatternStep(r.id);
+        return '<div class="portfolio-pattern-card ' + (step===3 ? "done" : "") + '"><div><span>' + esc(r.name) + '</span><strong>' + portfolioPatternLabel(step) + '</strong></div><div class="pattern-steps">' + [0,1,2,3].map(function(i){return '<i class="' + (i<=step ? "on" : "") + '"></i>';}).join("") + '</div><button data-portfolio-pattern="' + r.id + '" ' + (r.id==="pilot-east1" || step>=3 ? "disabled" : "") + '>' + (step>=3 ? "已复现" : "推进复制验证") + '</button></div>';
+      }).join("") + '</div>';
+  }
+
+  function renderScalePortfolio() {
+    var regions = scalePortfolioRegions();
+    var selected = portfolioSelectedRegion(regions);
+    var active = regions.find(function(r){return r.type === "active";});
+    var ranking = portfolioCandidateRanking(regions);
+    var next = ranking[0];
+    var conflicts = portfolioResourceConflicts();
+    var proven = regions.filter(function(r){return r.stage === "proven" || r.stage === "pilot";}).length;
+    var activeCount = regions.filter(function(r){return r.type === "current" || r.type === "active";}).length;
+    var highPressure = regions.filter(function(r){return r.resource >= 80;}).length;
+    var stage = portfolioStageMeta(selected.stage);
+
+    var filters = [
+      ["all","全部区域"],
+      ["active","运行中"],
+      ["candidate","候选"],
+      ["risk","风险 / 高负荷"]
+    ].map(function(item){
+      return '<button class="' + (state.scalePortfolioFilter === item[0] ? "active" : "") + '" data-portfolio-filter="' + item[0] + '">' + item[1] + '</button>';
+    }).join("");
+
+    var rankingRows = ranking.map(function(r,i){
+      return '<button class="portfolio-rank-row" data-portfolio-region="' + r.id + '"><span>0' + (i+1) + '</span><div><strong>' + esc(r.name) + '</strong><small>相似度 ' + r.similarity + '% · 数据 ' + r.data + '% · 复制成本 ' + esc(r.effort) + '</small></div><b>' + r.candidateScore + '</b></button>';
+    }).join("");
+
+    var selectedActions = selected.id === "pilot-east1"
+      ? '<button class="btn primary" data-route-jump="pilot">进入 Pilot 运营</button>'
+      : ((active && selected.id === active.id)
+        ? '<button class="btn primary" data-open-scale-plan>进入 90 天执行计划</button>'
+        : '<button class="btn primary" data-portfolio-next-target="' + selected.id + '">设为下次扩区候选</button>');
+
+    var actionItems = [];
+    if (active) actionItems.push({tone:"primary",title:active.name + " · " + portfolioStageMeta(active.stage).label,detail:active.next,action:"进入执行计划",route:"plan"});
+    if (next) actionItems.push({tone:"",title:"下一候选 · " + next.name,detail:"候选分 " + next.candidateScore + ". " + next.next,action:"查看候选",region:next.id});
+    if (conflicts.length) actionItems.push({tone:"risk",title:"资源容量冲突",detail:conflicts.map(function(x){return x.name;}).join("、") + " 已超过并行复制容量.",action:"调整资源",region:selected.id});
+    else actionItems.push({tone:"good",title:"资源容量可控",detail:"当前没有跨区资源超配, 可以继续保留下一阶段候选.",action:"查看资源",region:selected.id});
+    var patternPending = regions.filter(function(r){return portfolioPatternStep(r.id)<3;}).length;
+    actionItems.push({tone:"",title:"Champion Pattern 跨区复制",detail:"还有 " + patternPending + " 个区域尚未完成复现验证.",action:"推进复制",region:selected.id});
+
+    return '<div class="portfolio-page">' +
+      '<section class="portfolio-hero"><div><span>HEADQUARTERS SCALE PORTFOLIO</span><h1>全国扩区不看“上线多少”, 看哪里已经产生价值, 哪里值得继续复制</h1><p>把 Pilot、在途 Scale、候选区域、资源容量和跨区 Pattern 复现放在同一张经营地图里.</p></div><div><strong>' + regions.length + '</strong><span>当前区域组合</span></div></section>' +
+      '<section class="portfolio-kpis"><div><span>运行中区域</span><strong>' + activeCount + '</strong><small>Pilot + 正式扩区</small></div><div><span>已形成基准</span><strong>' + proven + '</strong><small>Pilot / Scale Proven</small></div><div><span>资源高负荷</span><strong>' + highPressure + '</strong><small>负荷 ≥80%</small></div><div class="' + (conflicts.length ? "risk" : "good") + '"><span>资源冲突</span><strong>' + conflicts.length + '</strong><small>' + (conflicts.length ? "需总部重新分配" : "当前可控") + '</small></div><div><span>下一候选</span><strong>' + (next ? esc(next.name) : "-") + '</strong><small>' + (next ? "候选分 " + next.candidateScore : "暂无") + '</small></div></section>' +
+      '<section class="portfolio-section"><div class="portfolio-section-head"><div><span>REGION PORTFOLIO</span><h2>区域成熟度与价值验证</h2><p>当前运行状态来自现有 Pilot / Scale 前端状态, 候选区域只展示准备度, 不虚构业务 Value.</p></div><div class="portfolio-filters">' + filters + '</div></div><div class="portfolio-region-grid">' + renderPortfolioRegionCards(regions) + '</div></section>' +
+      '<section class="portfolio-detail-grid"><div class="portfolio-selected"><div class="portfolio-section-head compact"><div><span>SELECTED REGION</span><h2>' + esc(selected.name) + '</h2><p>' + esc(selected.note) + '</p></div><b class="portfolio-stage ' + stage.cls + '">' + esc(stage.label) + '</b></div><div class="portfolio-selected-metrics"><div><span>相似度</span><strong>' + selected.similarity + '%</strong></div><div><span>数据准备</span><strong>' + selected.data + '%</strong></div><div><span>执行</span><strong>' + selected.execution + '%</strong></div><div><span>资源负荷</span><strong>' + selected.resource + '%</strong></div></div><div class="portfolio-selected-next"><span>NEXT MANAGEMENT MOVE</span><strong>' + esc(selected.next) + '</strong></div><div class="portfolio-selected-actions">' + selectedActions + '</div></div>' +
+      '<div class="portfolio-ranking"><div class="portfolio-section-head compact"><div><span>NEXT TERRITORY</span><h2>下一批候选依据</h2><p>候选分只使用场景相似度、数据准备度和复制成本, 不把未验证的业务 Value 当成事实.</p></div></div><div class="portfolio-ranking-list">' + (rankingRows || '<div class="brief-muted">当前没有剩余候选区域.</div>') + '</div></div></section>' +
+      '<section class="portfolio-section"><div class="portfolio-section-head"><div><span>SHARED RESOURCE CAPACITY</span><h2>跨区域共享资源</h2><p>同一批医学、数据、销售卓越和产品运营资源不能无限并行. 可以为当前选中区域预留下阶段容量.</p></div></div><div class="portfolio-resource-grid">' + renderPortfolioResourceBoard(selected,regions) + '</div></section>' +
+      '<section class="portfolio-section">' + renderPortfolioPatternBoard(regions) + '</section>' +
+      '<section class="portfolio-section"><div class="portfolio-section-head"><div><span>HQ ACTION BOARD</span><h2>总部下一步只处理这些事</h2><p>把区域进度、候选、资源和可复制打法汇成少量管理动作.</p></div></div><div class="portfolio-action-grid">' + actionItems.map(function(item){
+        var attrs = item.route === "plan" ? " data-open-scale-plan" : (' data-portfolio-region="' + (item.region || selected.id) + '"');
+        return '<button class="portfolio-action ' + item.tone + '"' + attrs + '><span>' + esc(item.action) + '</span><strong>' + esc(item.title) + '</strong><p>' + esc(item.detail) + '</p></button>';
+      }).join("") + '</div></section>' +
+    '</div>';
+  }
+
+
   function commitScaleGateDecision(key) {
     var gate = scaleGateModel();
     if (!scaleDecisionAllowed(key, gate)) {
@@ -4098,6 +4389,7 @@
     else if (state.route === "cockpit") view = renderCockpit();
     else if (state.route === "pilot") view = renderPilot();
     else if (state.route === "scaleplan") view = renderScaleExecutionPlan();
+    else if (state.route === "portfolio") view = renderScalePortfolio();
     else if (state.route === "learning") view = renderLearning();
     else if (state.route === "guardrails") view = renderGuardrails();
     else if (state.route === "admin") view = renderAdmin();
@@ -4504,7 +4796,49 @@
       });
     });
 
-    $$("[data-scale-target]").forEach(function (el) {
+    $("[data-portfolio-filter]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.scalePortfolioFilter = el.getAttribute("data-portfolio-filter") || "all";
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-portfolio-region]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.scalePortfolioSelected = el.getAttribute("data-portfolio-region") || "east2";
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-portfolio-resource]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        togglePortfolioResource(
+          el.getAttribute("data-portfolio-resource"),
+          el.getAttribute("data-portfolio-resource-region")
+        );
+      });
+    });
+
+    $("[data-portfolio-pattern]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        advancePortfolioPattern(el.getAttribute("data-portfolio-pattern"));
+      });
+    });
+
+    $("[data-portfolio-next-target]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var id = el.getAttribute("data-portfolio-next-target") || "east2";
+        state.scaleGateTarget = id;
+        state.scalePortfolioSelected = id;
+        saveState();
+        showToast("已设为下一次 Scale Gate 候选");
+        render();
+      });
+    });
+
+    $("[data-scale-target]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.scaleGateTarget = el.getAttribute("data-scale-target") || "east2";
         saveState();
