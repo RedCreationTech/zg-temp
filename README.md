@@ -623,6 +623,202 @@ AI 四轮模拟结果
 
 因此完成陪练后，团队能力画像和辅导优先级会随前端状态变化。
 
+## 本轮 Executive Brief → Pilot Scale Decision
+
+Pilot Operations 现在增加正式的：
+
+```text
+W8 SCALE GATE
+```
+
+管理层不再只看一个 Scale Readiness 百分比，而是逐项检查 6 个门槛：
+
+```text
+Market Proof
+Product Proof
+Data Readiness
+Operating Loop
+Management Closure
+Repeatability
+```
+
+其中前 5 项属于关键门槛。
+
+### Gate 逻辑
+
+每个 Gate 都展示：
+
+- 当前分数
+- 目标分数
+- 是否通过
+- 为什么这个维度重要
+
+例如：
+
+```text
+Market Proof
+84 / 80
+已通过
+
+客户愿意继续投入
+经理持续参与
+业务问题足够刚性
+```
+
+Operating Loop 由以下指标组合：
+
+```text
+Action Completion
++
+Review Coverage
++
+Outcome Rate
+```
+
+Management Closure 会检查：
+
+```text
+Director Decisions
++
+Weekly Review
++
+Weekly Decision Brief
+```
+
+Repeatability 会检查：
+
+```text
+Champion Pattern
++
+Team Playbook
++
+Rule Reuse
+```
+
+### Pilot 时间门槛
+
+正式 Scale Decision 只允许在：
+
+```text
+W7–W8
+```
+
+进行。
+
+W1–W6 即使部分分数已经达标，也只能继续验证，不能直接批准扩区。
+
+### Scale Recommendation
+
+系统根据门槛自动形成三档建议：
+
+```text
+继续当前区域验证
+
+有条件扩展 1 个区域
+
+批准扩展到下一地区
+```
+
+其中：
+
+- “继续验证”始终可选
+- “有条件扩展”需要进入 W7/W8 且大部分关键 Gate 通过
+- “批准扩区”要求全部关键 Gate + Repeatability 通过
+
+最终选择仍由管理层完成。
+
+### 下一候选区域
+
+前端演示提供三个候选：
+
+```text
+华东二区
+相似度 92%
+数据准备度 84%
+复制成本低
+
+华中一区
+相似度 78%
+数据准备度 72%
+复制成本中
+
+华南核心城市
+相似度 68%
+数据准备度 61%
+复制成本高
+```
+
+管理层可以切换候选区域，再做最终判断。
+
+### Executive Brief 联动
+
+Executive Brief 底部新增：
+
+```text
+PILOT SCALE DECISION
+```
+
+显示：
+
+- 当前 Gate 通过数
+- Gate 综合状态
+- AI 推荐
+- 已做出的最终 Scale Decision
+
+可以直接点击：
+
+```text
+进入 Scale Gate
+```
+
+进入 Pilot Operations。
+
+系统会自动推进到至少 W7 决策窗口。
+
+Scale Gate 也可以点击：
+
+```text
+回到 Executive Brief
+```
+
+形成：
+
+```text
+Executive Brief
+→
+Pilot Scale Gate
+→
+Scale Decision
+→
+Executive Brief
+```
+
+### 最终管理闭环
+
+当前高保真原型已经可以完整演示：
+
+```text
+Hospital Context
+↓
+Doctor NBA
+↓
+Representative Action
+↓
+Visit Coaching
+↓
+Team Coaching
+↓
+Weekly Review
+↓
+Director Decision
+↓
+Executive Brief
+↓
+Pilot Scale Gate
+↓
+Hold / Conditional Expand / Scale
+```
+
 ## 本轮 Director Cockpit → Brief 管理闭环
 
 Director Decision Cockpit 现在不再和 Weekly Brief 平行存在。
