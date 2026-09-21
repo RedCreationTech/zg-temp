@@ -2168,51 +2168,79 @@
       });
     });
 
-    $$("[data-roleplay-choice]").forEach(function (el) {
+    $$("[data-roleplay-round-choice]").forEach(function (el) {
       el.addEventListener("click", function () {
         var v = data.visits.find(function (x) { return x.id === state.selectedVisit; }) || data.visits[0];
         var session = coachingRoleplaySession(v.id);
-        var config = roleplayConfig(v);
-        var choiceIndex = Number(el.getAttribute("data-roleplay-choice"));
-        var choice = config.choices[choiceIndex];
-        if (!choice) return;
-        session.lastChoice = choiceIndex;
-        session.lastScore = choice.score;
-        session.attempts.push({ choice: choiceIndex, score: choice.score, at: new Date().toISOString() });
+        var scenario = roleplayScenario(v);
+        var roundIndex = Number(session.round || 0);
+        var round = scenario.rounds[roundIndex];
+        var choiceIndex = Number(el.getAttribute("data-roleplay-round-choice"));
+        var choice = round && round.choices[choiceIndex];
+        if (!round || !choice || session.conversationDone) return;
+
+        session.history.push({
+          round: roundIndex + 1,
+          dimension: round.dimension,
+          stage: round.stage,
+          doctor: round.doctor,
+          rep: choice.text,
+          reply: choice.reply,
+          score: choice.score,
+          feedback: choice.feedback,
+          at: new Date().toISOString()
+        });
+        session.dimensionScores[round.dimension] = choice.score;
+        session.round = roundIndex + 1;
+
+        if (session.round >= scenario.rounds.length) {
+          session.conversationDone = true;
+        }
+
         saveState();
         render();
-        showToast("医生已回应 · 本轮 " + choice.score + " 分");
+        showToast(round.dimension + " · " + choice.score + " 分");
       });
     });
 
-    $$("[data-roleplay-retry]").forEach(function (el) {
+    $$("[data-roleplay-restart]").forEach(function (el) {
       el.addEventListener("click", function () {
         var session = coachingRoleplaySession(state.selectedVisit);
-        session.lastChoice = null;
-        session.lastScore = null;
+        session.round = 0;
+        session.history = [];
+        session.dimensionScores = {};
+        session.conversationDone = false;
+        session.completed = false;
+        session.lockedAt = null;
         saveState();
         render();
+        showToast("已重新开始 4 轮模拟");
       });
     });
 
-    $$("[data-roleplay-complete]").forEach(function (el) {
+    $$("[data-roleplay-lock]").forEach(function (el) {
       el.addEventListener("click", function () {
         var v = data.visits.find(function (x) { return x.id === state.selectedVisit; }) || data.visits[0];
         var session = coachingRoleplaySession(v.id);
-        var best = session.attempts.reduce(function(max,a){return Math.max(max,Number(a.score||0));},0);
-        if (best < 85) {
-          showToast("Best Score 需要达到 85 才能完成陪练");
+        var scenario = roleplayScenario(v);
+        var scorecard = roleplayScorecard(session, scenario);
+        if (!scorecard.passed) {
+          showToast("总分需要达到 85 才能锁定训练结果");
           return;
         }
+
         session.completed = true;
+        session.lockedAt = new Date().toISOString();
+
         var review = coachingReviewSession(v.id);
         review.nextActionAccepted = true;
         review.completed = true;
         if (v.id === "v2") state.actionStatus.a7 = "doing";
         else state.actionStatus.a3 = "doing";
+
         saveState();
         render();
-        showToast("陪练完成, 下一次打法已锁定");
+        showToast("4 轮模拟已锁定为经理检查证据");
       });
     });
 
