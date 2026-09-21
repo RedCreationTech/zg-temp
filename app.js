@@ -1061,7 +1061,7 @@
     var steps = [
       ["00:00–00:45","自动摘要",generated],
       ["00:45–01:30","Top 1 诊断",generated],
-      ["01:30–02:30","AI 陪练",coachingRoleplaySession(v.id).attempts.length > 0],
+      ["01:30–02:30","AI 陪练",(coachingRoleplaySession(v.id).history || []).length > 0],
       ["02:30–03:00","确认下一步",coachingRoleplaySession(v.id).completed]
     ].map(function(s){
       return '<div class="review-step ' + (s[2] ? "done" : "") + '"><span>' + (s[2] ? "✓" : "") + '</span><div><b>' + esc(s[0]) + '</b><strong>' + esc(s[1]) + '</strong></div></div>';
