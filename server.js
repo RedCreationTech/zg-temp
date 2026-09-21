@@ -2,6 +2,18 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { randomUUID } = require("crypto");
+const { createSeedDomain } = require("./lib/seed-data");
+const {
+  ensureDomain,
+  getHospital,
+  getDoctor,
+  getVisit,
+  listDoctors,
+  listVisits,
+  createOutcome,
+  createRule
+} = require("./lib/domain-model");
+const { runDecision } = require("./lib/decision-engine");
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -44,11 +56,12 @@ const DEMO_ORG = {
 
 function initialState() {
   return {
-    version: 1,
+    version: 2,
     createdAt: new Date().toISOString(),
     actionStatus: {},
     sessions: [],
     customRules: [],
+    domain: createSeedDomain(),
     crmSync: {
       status: "idle",
       lastSyncedAt: null,
@@ -56,6 +69,34 @@ function initialState() {
     },
     audit: []
   };
+}
+
+function migrateState(state) {
+  const target = state && typeof state === "object" ? state : initialState();
+  if (!target.domain) target.domain = createSeedDomain();
+  target.domain = ensureDomain(target.domain);
+
+  const seed = createSeedDomain();
+  if (target.domain.hospitals.length === 0) target.domain.hospitals = seed.hospitals;
+  if (target.domain.doctors.length === 0) target.domain.doctors = seed.doctors;
+  if (target.domain.visits.length === 0) target.domain.visits = seed.visits;
+  if (target.domain.rules.length === 0) target.domain.rules = seed.rules;
+  if (target.domain.actions.length === 0) target.domain.actions = seed.actions;
+
+  target.actionStatus = target.actionStatus || {};
+  target.sessions = Array.isArray(target.sessions) ? target.sessions : [];
+  target.customRules = Array.isArray(target.customRules) ? target.customRules : [];
+  target.audit = Array.isArray(target.audit) ? target.audit : [];
+  target.crmSync = target.crmSync || { status: "idle", lastSyncedAt: null, records: 0 };
+  target.version = 2;
+
+  for (const rule of target.customRules) {
+    if (rule && rule.id && !target.domain.rules.some(item => item.id === rule.id)) {
+      target.domain.rules.push(Object.assign({ type: "DecisionRule", appliesTo: [] }, rule));
+    }
+  }
+
+  return target;
 }
 
 function ensureRuntime() {
@@ -68,7 +109,9 @@ function ensureRuntime() {
 function readState() {
   ensureRuntime();
   try {
-    return JSON.parse(fs.readFileSync(RUNTIME_FILE, "utf8"));
+    const state = migrateState(JSON.parse(fs.readFileSync(RUNTIME_FILE, "utf8")));
+    writeState(state);
+    return state;
   } catch (error) {
     const state = initialState();
     fs.writeFileSync(RUNTIME_FILE, JSON.stringify(state, null, 2));
@@ -178,7 +221,7 @@ async function handleApi(req, res, url) {
     return json(res, 200, {
       ok: true,
       service: "ZG AI GPS Pilot Runtime",
-      version: "0.3.0",
+      version: "0.4.0",
       now: new Date().toISOString()
     });
   }
@@ -189,12 +232,115 @@ async function handleApi(req, res, url) {
       actionStatus: state.actionStatus || {},
       customRules: state.customRules || [],
       crmSync: state.crmSync || {},
+      domainSummary: {
+        hospitals: state.domain.hospitals.length,
+        doctors: state.domain.doctors.length,
+        visits: state.domain.visits.length,
+        rules: state.domain.rules.length,
+        decisions: state.domain.decisions.length,
+        nbas: state.domain.nbas.length,
+        outcomes: state.domain.outcomes.length
+      },
       session: state.sessions && state.sessions[0] ? state.sessions[0] : null
     });
   }
 
   if (method === "GET" && pathname === "/api/org") {
     return json(res, 200, { ok: true, ...DEMO_ORG });
+  }
+
+  if (method === "GET" && pathname === "/api/domain/hospitals") {
+    return json(res, 200, { ok: true, hospitals: state.domain.hospitals });
+  }
+
+  const hospitalMatch = pathname.match(/^\/api\/domain\/hospitals\/([^/]+)$/);
+  if (method === "GET" && hospitalMatch) {
+    const hospital = getHospital(state.domain, decodeURIComponent(hospitalMatch[1]));
+    if (!hospital) return json(res, 404, { ok: false, error: "Hospital not found" });
+    return json(res, 200, {
+      ok: true,
+      hospital,
+      doctors: listDoctors(state.domain, hospital.id),
+      visits: listVisits(state.domain, { hospitalId: hospital.id })
+    });
+  }
+
+  if (method === "GET" && pathname === "/api/domain/doctors") {
+    const hospitalId = url.searchParams.get("hospitalId");
+    return json(res, 200, { ok: true, doctors: listDoctors(state.domain, hospitalId) });
+  }
+
+  const doctorMatch = pathname.match(/^\/api\/domain\/doctors\/([^/]+)$/);
+  if (method === "GET" && doctorMatch) {
+    const doctor = getDoctor(state.domain, decodeURIComponent(doctorMatch[1]));
+    if (!doctor) return json(res, 404, { ok: false, error: "Doctor not found" });
+    return json(res, 200, {
+      ok: true,
+      doctor,
+      hospital: getHospital(state.domain, doctor.hospitalId),
+      visits: listVisits(state.domain, { doctorId: doctor.id })
+    });
+  }
+
+  if (method === "GET" && pathname === "/api/domain/visits") {
+    return json(res, 200, {
+      ok: true,
+      visits: listVisits(state.domain, {
+        hospitalId: url.searchParams.get("hospitalId"),
+        doctorId: url.searchParams.get("doctorId"),
+        repUserId: url.searchParams.get("repUserId")
+      })
+    });
+  }
+
+  const visitMatch = pathname.match(/^\/api\/domain\/visits\/([^/]+)$/);
+  if (method === "GET" && visitMatch) {
+    const visit = getVisit(state.domain, decodeURIComponent(visitMatch[1]));
+    if (!visit) return json(res, 404, { ok: false, error: "Visit not found" });
+    return json(res, 200, {
+      ok: true,
+      visit,
+      doctor: getDoctor(state.domain, visit.doctorId),
+      hospital: getHospital(state.domain, visit.hospitalId)
+    });
+  }
+
+  if (method === "GET" && pathname === "/api/domain/decisions") {
+    return json(res, 200, {
+      ok: true,
+      decisions: state.domain.decisions.slice().reverse().slice(0, 100),
+      nbas: state.domain.nbas.slice().reverse().slice(0, 100)
+    });
+  }
+
+  if (method === "GET" && pathname === "/api/domain/outcomes") {
+    return json(res, 200, { ok: true, outcomes: state.domain.outcomes.slice().reverse() });
+  }
+
+  if (method === "POST" && pathname === "/api/domain/outcomes") {
+    const body = await readBody(req);
+    const nba = state.domain.nbas.find(item => item.id === body.nbaId);
+    if (!nba) return json(res, 400, { ok: false, error: "NBA not found" });
+
+    const outcome = createOutcome({
+      id: "out-" + randomUUID(),
+      nbaId: nba.id,
+      actionId: body.actionId || null,
+      targetType: nba.targetType,
+      targetId: nba.targetId,
+      result: body.result,
+      signal: body.signal,
+      evidence: body.evidence || "",
+      effectiveness: body.effectiveness,
+      recordedBy: body.actor || "demo-user",
+      occurredAt: body.occurredAt
+    });
+
+    state.domain.outcomes.push(outcome);
+    nba.status = "measured";
+    audit(state, "outcome.record", body.actor, outcome.id, "nba=" + nba.id + "; effectiveness=" + outcome.effectiveness);
+    writeState(state);
+    return json(res, 201, { ok: true, outcome });
   }
 
   if (method === "GET" && pathname === "/api/audit") {
@@ -232,15 +378,46 @@ async function handleApi(req, res, url) {
   if (method === "POST" && pathname === "/api/nba/generate") {
     const body = await readBody(req);
     const type = String(body.type || "doctor");
-    const text = getNbaText(type);
-    audit(state, "nba.generate", body.actor, type, "generated");
+    const result = runDecision(state.domain, {
+      type,
+      actor: body.actor,
+      role: body.role || (body.context && body.context.role),
+      targetId: body.targetId,
+      context: body.context || {}
+    });
+
+    state.domain.contextSnapshots.push(result.context);
+    state.domain.decisions.push(result.decision);
+    state.domain.nbas.push(result.nba);
+
+    for (const rule of result.rules) {
+      const persisted = state.domain.rules.find(item => item.id === rule.id);
+      if (persisted) persisted.uses = Number(persisted.uses || 0) + 1;
+    }
+
+    audit(
+      state,
+      "nba.generate",
+      body.actor,
+      result.nba.id,
+      "type=" + type + "; target=" + result.nba.targetType + ":" + result.nba.targetId + "; score=" + result.decision.priorityScore
+    );
     writeState(state);
+
     return json(res, 200, {
       ok: true,
       type,
-      text,
-      context: body.context || {},
-      model: "ZG Decision Engine Local",
+      text: result.text,
+      context: result.context,
+      decision: result.decision,
+      nba: result.nba,
+      rules: result.rules.map(rule => ({
+        id: rule.id,
+        title: rule.title,
+        confidence: rule.confidence,
+        status: rule.status
+      })),
+      model: result.model,
       generatedAt: new Date().toISOString()
     });
   }
@@ -255,19 +432,20 @@ async function handleApi(req, res, url) {
 
   if (method === "POST" && pathname === "/api/rules") {
     const body = await readBody(req);
-    const rule = {
-      id: body.id || "R-" + String(100 + state.customRules.length + 1),
-      title: String(body.title || "未命名 Rule"),
-      context: String(body.context || "待补充 Context"),
-      decision: String(body.decision || "待验证 Decision"),
-      action: String(body.action || "待验证 Action"),
-      outcome: String(body.outcome || "等待 Outcome"),
-      confidence: Math.max(0, Math.min(100, Number(body.confidence || 60))),
-      status: body.status === "validated" ? "validated" : "testing",
-      uses: Number(body.uses || 0),
-      createdAt: new Date().toISOString()
-    };
+    const rule = createRule({
+      id: body.id || "R-" + String(100 + state.domain.rules.length + 1),
+      title: body.title || "未命名 Rule",
+      context: body.context || "待补充 Context",
+      decision: body.decision || "待验证 Decision",
+      action: body.action || "待验证 Action",
+      outcome: body.outcome || "等待 Outcome",
+      confidence: body.confidence,
+      status: body.status,
+      uses: body.uses,
+      appliesTo: body.appliesTo || []
+    });
     state.customRules.unshift(rule);
+    state.domain.rules.unshift(rule);
     audit(state, "rule.create", body.actor, rule.id, rule.title);
     writeState(state);
     return json(res, 201, { ok: true, rule });
