@@ -856,46 +856,195 @@
   function coachingRoleplaySession(visitId) {
     if (!state.roleplaySessions[visitId]) {
       state.roleplaySessions[visitId] = {
-        attempts: [],
-        lastChoice: null,
-        lastScore: null,
-        completed: false
+        round: 0,
+        history: [],
+        dimensionScores: {},
+        conversationDone: false,
+        completed: false,
+        lockedAt: null
       };
     }
-    return state.roleplaySessions[visitId];
+    var session = state.roleplaySessions[visitId];
+
+    if (!Array.isArray(session.history)) {
+      session.round = 0;
+      session.history = [];
+      session.dimensionScores = {};
+      session.conversationDone = false;
+      session.completed = false;
+      session.lockedAt = null;
+    }
+    if (!session.dimensionScores) session.dimensionScores = {};
+    if (session.round == null) session.round = session.history.length;
+    return session;
   }
 
-  function roleplayConfig(v) {
+  function roleplayScenario(v) {
     if (v.issue === "推进不够") {
       return {
-        doctor: "这几个病例挺有意思的, 我回头再看看.",
-        target: "把模糊兴趣推进成一个有时间、有对象的明确承诺.",
-        choices: [
-          { text: "好的, 您有空再看看, 我下次再来.", score: 38, feedback: "延续了本次失效点. 没有病例、没有时间、没有客户行为.", reply: "好, 有需要再联系." },
-          { text: "下次住院组讨论时, 我们能不能一起判断 1 例边界患者? 我周四下午把病例卡带过来.", score: 94, feedback: "把兴趣转成了具体病例、具体场景和具体时间, 可以验证是否真正推进.", reply: "可以, 周四下午你带过来, 我们选一例看看." },
-          { text: "我再给您发几篇资料, 都是比较新的研究.", score: 57, feedback: "增加了内容, 但没有改变医生下一步行为.", reply: "可以发我邮箱, 我有空看看." }
+        title: "从“有兴趣”推进到明确承诺",
+        target: "连续完成场景确认、异议处理、时间锁定和最终承诺.",
+        rounds: [
+          {
+            dimension: "探询质量",
+            stage: "01 识别意愿",
+            doctor: "这几个病例挺有意思的, 我回头再看看.",
+            choices: [
+              { text: "好的, 您有空再看看, 我下次再来.", score: 38, reply: "好, 有需要再联系.", feedback: "直接结束了对话, 没有把兴趣转成任何可验证行为." },
+              { text: "您觉得这三个病例里, 哪一类最值得在住院组再判断一次?", score: 91, reply: "第二类吧, 这种边界患者我们组里意见确实不太一致.", feedback: "先确认了医生真正愿意继续讨论的场景, 为后续承诺创造 Context." },
+              { text: "我再给您发几篇最新研究, 内容比较完整.", score: 58, reply: "可以发我邮箱, 我有空看看.", feedback: "增加了内容, 但没有确认医生下一步愿意做什么." }
+            ]
+          },
+          {
+            dimension: "证据匹配",
+            stage: "02 聚焦场景",
+            doctor: "第二类患者比较复杂, 指南说得清楚, 但真实病人经常没那么标准.",
+            choices: [
+              { text: "那我把整套指南和研究都发给您, 信息会更完整.", score: 55, reply: "资料太多了, 我不一定有时间仔细看.", feedback: "证据数量增加, 但没有针对医生刚才指出的边界患者问题." },
+              { text: "那我们只拿 1 例类似的边界患者, 对照您最关心的两个判断标准来看.", score: 94, reply: "这样可以, 如果病例够接近的话会更有意义.", feedback: "把证据范围缩到医生真实决策标准, 降低了沟通负担." },
+              { text: "其实我们产品在很多患者里效果都不错.", score: 42, reply: "我现在不是在问产品整体效果.", feedback: "偏离了医生当前 Context, 又回到了泛化产品介绍." }
+            ]
+          },
+          {
+            dimension: "异议处理",
+            stage: "03 处理时间异议",
+            doctor: "不过这周我们组里比较忙, 不一定能专门安排时间.",
+            choices: [
+              { text: "没问题, 那我下周再联系您.", score: 49, reply: "好, 到时候再看吧.", feedback: "接受了异议但没有缩小动作, 机会再次变成模糊跟进." },
+              { text: "不用单独开会. 下次住院组原本讨论病例时, 留 10 分钟一起判断 1 例就行.", score: 92, reply: "这个可以, 不额外占时间的话比较现实.", feedback: "保留了医生的时间约束, 同时把动作缩小为可执行的最小承诺." },
+              { text: "这个内容很重要, 我还是建议专门安排半小时.", score: 51, reply: "半小时确实比较难安排.", feedback: "没有顺着客户约束调整方案, 继续增加了执行成本." }
+            ]
+          },
+          {
+            dimension: "推进承诺",
+            stage: "04 锁定下一步",
+            doctor: "可以, 下次住院组讨论时顺便看一例.",
+            choices: [
+              { text: "好的, 那我到时候提前联系您.", score: 67, reply: "可以.", feedback: "已有积极意愿, 但仍缺具体时间、病例和代表下一步动作." },
+              { text: "那就定周四下午. 我周三把 1 例边界病例卡发您确认, 周四讨论时一起判断.", score: 97, reply: "可以, 你周三先发我, 周四我们组里一起看.", feedback: "形成了时间、对象、准备动作和客户行为, 是完整可验证承诺." },
+              { text: "好的, 我把资料准备充分一些再说.", score: 54, reply: "行, 你准备好再联系.", feedback: "又把已经出现的机会推回未来, 没有锁定承诺." }
+            ]
+          }
         ]
       };
     }
+
     if (v.issue === "可复制经验") {
       return {
-        doctor: "这个流程问题确实一直存在, 你说的病例讨论方式可以试试.",
-        target: "复制有效结构, 把认可锁定成病例会日期、人员和病例.",
-        choices: [
-          { text: "太好了, 那我回去再准备完整一些, 下次来详细讲.", score: 61, feedback: "方向正确但又把承诺推迟了, 没有锁定本次已经出现的机会.", reply: "好, 你下次准备好了再说." },
-          { text: "那我们把它定下来: 下周病例会留 20 分钟, 您看周二还是周四更合适? 我们只准备 3 个典型病例.", score: 96, feedback: "把正向意愿变成日期、时长和具体内容, 是可追踪的下一步.", reply: "周四吧, 你先和秘书确认一下时间." },
-          { text: "我们产品其实还有很多优势, 我可以再系统介绍一下.", score: 44, feedback: "从客户流程问题又滑回产品介绍, 丢掉了当前最有价值的 Context.", reply: "产品资料我之前已经看过了." }
+        title: "把正向兴趣复制成病例共识会",
+        target: "把流程问题认可转成日期、参与人、病例和会后跟进.",
+        rounds: [
+          {
+            dimension: "探询质量",
+            stage: "01 确认问题",
+            doctor: "这个患者识别问题确实一直存在, 不同医生的判断差异挺大.",
+            choices: [
+              { text: "我们的产品正好可以解决这个问题.", score: 46, reply: "我说的是流程标准不一致, 不只是产品.", feedback: "把客户流程问题过早转成产品价值, 丢失了当前最强 Context." },
+              { text: "如果只能先统一一个环节, 您觉得最值得先解决的是患者识别还是随访?", score: 95, reply: "先识别吧, 前面都不一致, 后面更难统一.", feedback: "让医生自己定义最优先流程节点, 后续动作更容易获得支持." },
+              { text: "这个问题很多医院都有, 我们有不少成功案例.", score: 68, reply: "案例可以看看, 但我们科具体怎么改还得再讨论.", feedback: "建立了一定相关性, 但还没有进一步确认当前科室的优先节点." }
+            ]
+          },
+          {
+            dimension: "证据匹配",
+            stage: "02 设计小实验",
+            doctor: "患者识别要统一的话, 最好别一开始搞得太复杂.",
+            choices: [
+              { text: "那我们做一次完整培训, 把指南和研究都系统讲一遍.", score: 53, reply: "完整培训可能大家时间不够.", feedback: "动作过大, 与医生要求的“小而简单”相反." },
+              { text: "不做培训. 只拿 3 类最常见病例, 20 分钟把判断标准跑一遍.", score: 97, reply: "这个可以, 20 分钟比较容易安排.", feedback: "把业务问题转成一个低成本、可验证的小实验." },
+              { text: "我先给大家建一个资料群, 后面慢慢看.", score: 58, reply: "资料群可以, 但未必有人会统一看.", feedback: "仍然是信息分发, 不是改变决策流程." }
+            ]
+          },
+          {
+            dimension: "异议处理",
+            stage: "03 确认参与人",
+            doctor: "不过病例讨论不能只有我一个人, 门诊组最好也有人参加.",
+            choices: [
+              { text: "那您看谁方便就叫谁吧.", score: 62, reply: "到时候再看谁有空.", feedback: "把关键参与人留成模糊状态, 会降低会议真正发生的概率." },
+              { text: "同意. 您定 2 位门诊组核心医生, 我们就围绕他们最常遇到的病例准备.", score: 94, reply: "可以, 我让李医生和孙医生一起参加.", feedback: "顺着医生的真实约束, 同时把参与人明确下来." },
+              { text: "其实您作为主任参加就够了.", score: 39, reply: "流程要落地还是得让门诊组的人一起参与.", feedback: "忽略了执行层, 与流程共识的业务目标冲突." }
+            ]
+          },
+          {
+            dimension: "推进承诺",
+            stage: "04 锁定病例会",
+            doctor: "那就找个时间试一次吧.",
+            choices: [
+              { text: "好, 我回去准备完再和您约.", score: 64, reply: "行, 你准备好了再说.", feedback: "已有明确机会, 但没有把口头意愿锁成日期." },
+              { text: "下周四病例会留 20 分钟怎么样? 我周二前把 3 个病例和议程发给您确认.", score: 98, reply: "周四可以, 你先和秘书把时间锁一下.", feedback: "日期、时长、病例、准备动作都明确, 可以进入执行." },
+              { text: "我们下个月安排一个更正式的大型活动.", score: 47, reply: "先别搞那么大, 小范围试一次更合适.", feedback: "从小实验又跳回重投入活动, 放大了客户执行成本." }
+            ]
+          }
         ]
       };
     }
+
     return {
-      doctor: "数据我看过一些, 但我现在更关心这类患者到底怎么选.",
-      target: "先确认医生的真实决策标准, 再决定调用哪条证据.",
-      choices: [
-        { text: "我们这组真实世界数据纳入了很多高风险患者, 长期结果也比较完整.", score: 52, feedback: "仍然在继续呈现证据, 没有回应医生正在提出的“怎么选”这个决策问题.", reply: "我的问题还是哪些患者值得现在就调整方案." },
-        { text: "您判断这类患者时, 现在最看重哪两个指标? 是长期风险、既往事件, 还是当前控制情况?", score: 93, feedback: "先补 Context, 让后续证据可以精准绑定医生的决策标准.", reply: "我主要看既往事件和长期风险, 但安全性我也比较在意." },
-        { text: "指南其实对这类患者已经有比较明确的推荐.", score: 63, feedback: "比继续讲研究更接近决策, 但仍然没有先确认医生自己的判断标准.", reply: "指南我知道, 但实际患者没有那么标准." }
+      title: "从“证据展示”转成真实决策对话",
+      target: "先补 Context, 再精准证据, 处理异议, 最后锁定 MDT 承诺.",
+      rounds: [
+        {
+          dimension: "探询质量",
+          stage: "01 补 Context",
+          doctor: "数据我看过一些, 但我现在更关心这类患者到底怎么选.",
+          choices: [
+            { text: "我们这组真实世界数据纳入了很多高风险患者, 长期结果也比较完整.", score: 52, reply: "我的问题还是哪些患者值得现在就调整方案.", feedback: "继续呈现证据, 没有回应医生正在提出的“怎么选”这个决策问题." },
+            { text: "您判断这类患者时, 现在最看重哪两个指标? 是既往事件、长期风险, 还是当前控制情况?", score: 95, reply: "我主要看既往事件和长期风险, 但安全性也很重要.", feedback: "先确认医生自己的判断标准, 后续证据才能真正场景匹配." },
+            { text: "指南其实对这类患者已经有比较明确的推荐.", score: 63, reply: "指南我知道, 但实际患者没有那么标准.", feedback: "靠近决策问题, 但仍没有先确认医生在真实病例里的标准." }
+          ]
+        },
+        {
+          dimension: "证据匹配",
+          stage: "02 精准证据",
+          doctor: "我主要看既往事件和长期风险, 但安全性也很重要.",
+          choices: [
+            { text: "那我把研究全文和完整安全性数据都发给您.", score: 60, reply: "资料太多了, 我主要想知道这类患者是不是值得现在调整.", feedback: "信息过载, 没有把证据压缩到当前两个判断标准." },
+            { text: "那我们只看与既往事件和长期风险直接相关的这一组结果, 再单独看安全性边界.", score: 96, reply: "这样比较清楚. 不过这些患者和我们科的病人真的接近吗?", feedback: "证据直接映射医生刚刚说出的决策标准, 沟通效率高." },
+            { text: "其实这项研究总体结果都很好.", score: 49, reply: "总体结果我知道, 我关心的是具体哪些患者.", feedback: "再次回到总体产品价值, 丢掉了亚组 Context." }
+          ]
+        },
+        {
+          dimension: "异议处理",
+          stage: "03 处理外推异议",
+          doctor: "这些研究患者和我们科的真实病人真的接近吗?",
+          choices: [
+            { text: "研究设计很严格, 所以结果是可信的.", score: 57, reply: "可信不代表和我们患者一样.", feedback: "回答了研究质量, 没回答医生担心的患者外推问题." },
+            { text: "这是关键问题. 我们先对照这例患者的既往事件和风险特征, 看她与研究亚组差在哪里.", score: 94, reply: "可以, 如果差异不大, 周三 MDT 可以一起讨论.", feedback: "承认不确定性, 回到具体病例进行匹配, 没有过度承诺." },
+            { text: "很多医院都已经在用类似方案了.", score: 45, reply: "别的医院怎么用不能直接代表我们科.", feedback: "用社会证明替代临床匹配, 没解决医生真实异议." }
+          ]
+        },
+        {
+          dimension: "推进承诺",
+          stage: "04 锁定 MDT",
+          doctor: "如果这例患者差异不大, 周三 MDT 可以一起讨论.",
+          choices: [
+            { text: "好的, 我到时候再看看您是否方便.", score: 66, reply: "可以, 到时候再说.", feedback: "医生已经给出机会, 但代表没有锁定准备动作和讨论对象." },
+            { text: "那我周二前把这例患者与研究亚组的差异整理成一页, 周三 MDT 只讨论这一例, 可以吗?", score: 98, reply: "可以, 你周二先发我看看, 周三拿这一例讨论.", feedback: "把医生意愿转成时间、病例、准备动作和可验证客户承诺." },
+            { text: "那我把所有相关资料都准备好带过去.", score: 61, reply: "不用太多, 这例患者相关的就行.", feedback: "已有正确方向, 但动作仍然偏重, 没有充分收敛." }
+          ]
+        }
       ]
+    };
+  }
+
+  function roleplayScorecard(session, scenario) {
+    var dimensions = ["探询质量","证据匹配","异议处理","推进承诺"];
+    var scores = dimensions.map(function(dim){
+      var item = (session.history || []).find(function(h){ return h.dimension === dim; });
+      return { dimension: dim, score: item ? Number(item.score || 0) : 0 };
+    });
+    var completedScores = scores.filter(function(x){ return x.score > 0; });
+    var overall = completedScores.length
+      ? Math.round(completedScores.reduce(function(sum,x){ return sum + x.score; },0) / completedScores.length)
+      : 0;
+    var weakest = scores.slice().sort(function(a,b){ return a.score - b.score; })[0];
+    var strongest = scores.slice().sort(function(a,b){ return b.score - a.score; })[0];
+    return {
+      scores: scores,
+      overall: overall,
+      weakest: weakest,
+      strongest: strongest,
+      passed: session.conversationDone && overall >= 85,
+      title: scenario.title
     };
   }
 
@@ -928,37 +1077,72 @@
     var review = coachingReviewSession(v.id);
     var session = coachingRoleplaySession(v.id);
     if (!review.issueAccepted) {
-      return panel("AI 角色扮演", "先完成 3 分钟复盘并确认首要问题",
-        '<div class="roleplay-locked"><span>LOCKED</span><strong>确认 Top 1 改进点后开始陪练</strong><p>每轮只练一个行为, 避免把辅导变成一长串建议.</p></div>'
+      return panel("AI 多轮角色扮演", "先完成 3 分钟复盘并确认首要问题",
+        '<div class="roleplay-locked"><span>LOCKED</span><strong>确认 Top 1 改进点后开始 4 轮陪练</strong><p>一轮只做一件事: 补 Context → 匹配证据 → 处理异议 → 锁定承诺.</p></div>'
       );
     }
 
-    var config = roleplayConfig(v);
-    var last = session.lastChoice != null ? config.choices[session.lastChoice] : null;
-    var attempts = session.attempts.length;
-    var best = session.attempts.reduce(function(max,a){return Math.max(max,Number(a.score||0));},0);
+    var scenario = roleplayScenario(v);
+    var roundIndex = Math.min(Number(session.round || 0), scenario.rounds.length);
+    var currentRound = roundIndex < scenario.rounds.length ? scenario.rounds[roundIndex] : null;
+    var scorecard = roleplayScorecard(session, scenario);
 
-    var choices = config.choices.map(function(choice,i){
-      return '<button class="roleplay-choice ' + (session.lastChoice === i ? "selected" : "") + '" data-roleplay-choice="' + i + '"><span>' + String.fromCharCode(65+i) + '</span><p>' + esc(choice.text) + '</p></button>';
+    var progress = scenario.rounds.map(function(round,i){
+      var done = i < roundIndex;
+      var active = i === roundIndex && !session.conversationDone;
+      return '<div class="multi-round-step ' + (done ? "done" : "") + (active ? " active" : "") + '"><span>' + (done ? "✓" : "0" + (i+1)) + '</span><div><b>' + esc(round.dimension) + '</b><small>' + esc(round.stage) + '</small></div></div>';
+    }).join('<div class="multi-round-arrow">→</div>');
+
+    var history = (session.history || []).map(function(item){
+      return '<div class="conversation-block">' +
+        '<div class="conversation-message doctor"><span>医生</span><p>“' + esc(item.doctor) + '”</p></div>' +
+        '<div class="conversation-message rep"><span>代表</span><p>' + esc(item.rep) + '</p></div>' +
+        '<div class="conversation-message doctor reply"><span>医生回应</span><p>“' + esc(item.reply) + '”</p></div>' +
+        '<div class="conversation-feedback ' + (item.score >= 85 ? "good" : (item.score >= 65 ? "mid" : "bad")) + '"><b>' + esc(item.dimension) + ' · ' + item.score + '</b><span>' + esc(item.feedback) + '</span></div>' +
+      '</div>';
     }).join("");
 
-    var result = last
-      ? '<div class="roleplay-result ' + (last.score >= 85 ? "good" : (last.score >= 65 ? "mid" : "bad")) + '"><div class="roleplay-score"><strong>' + last.score + '</strong><span>本轮得分</span></div><div><span>医生回应</span><p>“' + esc(last.reply) + '”</p><b>' + esc(last.feedback) + '</b></div></div>'
-      : '<div class="roleplay-hint">选择一句你准备现场说的话, AI 会模拟医生回应并立即评分.</div>';
+    var current = "";
+    if (currentRound && !session.conversationDone) {
+      var choices = currentRound.choices.map(function(choice,i){
+        return '<button class="multi-roleplay-choice" data-roleplay-round-choice="' + i + '"><span>' + String.fromCharCode(65+i) + '</span><p>' + esc(choice.text) + '</p></button>';
+      }).join("");
+      current =
+        '<div class="current-round-card"><div class="current-round-head"><span>' + esc(currentRound.stage) + '</span><strong>' + esc(currentRound.dimension) + '</strong></div>' +
+        '<div class="conversation-message doctor current"><span>医生</span><p>“' + esc(currentRound.doctor) + '”</p></div>' +
+        '<div class="multi-roleplay-choices">' + choices + '</div></div>';
+    }
 
-    var practiceProof = session.completed
-      ? '<div class="practice-proof"><span>MANAGER CHECK EVIDENCE</span><strong>AI 陪练已完成 · Best ' + best + ' · 共 ' + attempts + ' 轮</strong><p>本次已围绕 “' + esc(v.issue) + '” 完成关键句练习, 可作为下一次拜访前的经理检查证据.</p></div>'
+    var scorecardHtml = "";
+    if (session.conversationDone) {
+      var dimensions = scorecard.scores.map(function(item){
+        return '<div class="scorecard-dimension"><div class="flex-between"><span>' + esc(item.dimension) + '</span><strong>' + item.score + '</strong></div><div class="bar"><i style="width:' + item.score + '%"></i></div></div>';
+      }).join("");
+      var passText = scorecard.passed ? "通过" : "需再练";
+      scorecardHtml =
+        '<div class="simulation-scorecard ' + (scorecard.passed ? "passed" : "retry") + '">' +
+          '<div class="scorecard-head"><div><span>SIMULATION SCORECARD</span><h3>完整拜访模拟评分卡</h3><p>' + esc(scenario.target) + '</p></div><div class="scorecard-total"><strong>' + scorecard.overall + '</strong><span>' + passText + '</span></div></div>' +
+          '<div class="scorecard-grid">' + dimensions + '</div>' +
+          '<div class="scorecard-insight"><div><span>最强维度</span><strong>' + esc(scorecard.strongest.dimension) + ' · ' + scorecard.strongest.score + '</strong></div><div><span>下一轮优先练</span><strong>' + esc(scorecard.weakest.dimension) + ' · ' + scorecard.weakest.score + '</strong></div></div>' +
+          (scorecard.passed
+            ? '<div class="practice-proof"><span>READY FOR MANAGER CHECK</span><strong>完整模拟已通过 · 总分 ' + scorecard.overall + '</strong><p>四个关键环节均已完成, 可以锁定为下一次拜访前的经理检查证据.</p></div>'
+            : '<div class="scorecard-warning"><strong>总分未达到 85</strong><span>建议重新挑战, 重点改善 “' + esc(scorecard.weakest.dimension) + '”.</span></div>') +
+          '<div class="roleplay-actions"><button class="btn ghost" data-roleplay-restart>重新挑战 4 轮</button><button class="btn primary" data-roleplay-lock ' + (!scorecard.passed || session.completed ? "disabled" : "") + '>' + (session.completed ? "✓ 已锁定为经理证据" : "锁定训练结果") + '</button></div>' +
+        '</div>';
+    }
+
+    var managerProof = session.completed
+      ? '<div class="practice-proof"><span>MANAGER CHECK EVIDENCE</span><strong>4 轮 AI 模拟已完成 · 总分 ' + scorecard.overall + '</strong><p>探询、证据匹配、异议处理、推进承诺均已形成可检查训练记录.</p></div>'
       : "";
 
-    return panel("AI 角色扮演", "医生由 AI 模拟, 只练本次 Top 1 问题: " + v.issue,
-      '<div class="roleplay-head"><div><span>DOCTOR</span><strong>“' + esc(config.doctor) + '”</strong><p>训练目标: ' + esc(config.target) + '</p></div><div class="roleplay-stats"><span>已练 ' + attempts + ' 轮</span><strong>Best ' + best + '</strong></div></div>' +
-      '<div class="roleplay-choices">' + choices + '</div>' +
-      result +
-      practiceProof +
-      (last ? '<div class="roleplay-actions"><button class="btn ghost" data-roleplay-retry>再打一遍</button><button class="btn primary" data-roleplay-complete ' + (best < 85 ? "disabled" : "") + '>' + (session.completed ? "✓ 陪练已完成" : "完成陪练, 锁定下一次打法") + '</button></div>' : '')
+    return panel("AI 多轮角色扮演", "完整模拟: " + scenario.title,
+      '<div class="multi-roleplay-head"><div><span>TRAINING TARGET</span><strong>' + esc(scenario.target) + '</strong></div><div><span>进度</span><strong>' + Math.min(roundIndex,4) + ' / 4</strong></div></div>' +
+      '<div class="multi-round-progress">' + progress + '</div>' +
+      '<div class="conversation-thread">' + history + current + '</div>' +
+      scorecardHtml +
+      managerProof
     );
   }
-
   function renderCoaching() {
     var v = data.visits.find(function (x) { return x.id === state.selectedVisit; }) || data.visits[0];
     var visitOptions = data.visits.map(function (x) {
