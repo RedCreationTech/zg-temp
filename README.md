@@ -812,6 +812,169 @@ Scale Operations Cockpit
 Day 60 / Day 90 Review
 ```
 
+## 本轮 Portfolio Wave Planning / Executive Review
+
+Scale Portfolio 现在不再只是区域组合监控, 而是进一步增加总部季度级 Rollout 编排.
+
+### Wave 1 / 2 / 3
+
+当前原型把下一阶段扩区拆成三个季度 Wave:
+
+```text
+Wave 1 · Q4 2026
+→ 当前季度
+
+Wave 2 · Q1 2027
+→ 下一季度
+
+Wave 3 · Q2 2027
+→ 后续季度
+```
+
+正式扩区区域如果已经生成 90 天 Scale Execution Plan, 会锁定在 Wave 1.
+
+候选区域可以在 Wave 之间：
+
+```text
+提前
+延后
+```
+
+但进入 Wave 只代表总部规划顺序, 不代表区域已经通过 Scale Gate.
+
+### 三种总部情景
+
+Wave Planning 支持三种纯前端情景模拟：
+
+```text
+稳健
+78 资源点 / Wave
+最多 1 个并行区域
+
+平衡
+118 资源点 / Wave
+最多 2 个并行区域
+
+加速
+158 资源点 / Wave
+最多 3 个并行区域
+```
+
+这些是原型中的演示资源点, 不是实际项目金额.
+
+每个 Wave 会动态计算：
+
+- 当前资源点需求
+- 预算容量
+- 并行区域数
+- 并行上限
+- 是否超出预算
+- 是否超出并行容量
+
+### 区域节奏
+
+总部可以对候选 / 扩区区域选择：
+
+```text
+加速
+保持
+暂停
+延后
+```
+
+其中：
+
+- 候选区域“加速”会自动尝试提前一个 Wave
+- 候选区域“延后”会自动后移一个 Wave
+- 正式扩区区域不能直接从 Portfolio 延后
+- 正式扩区的“暂停 / 加速”只用于总部组合情景模拟
+- 真正改变已经生效的 90 天执行计划, 仍需要回到 Management Gate
+
+这样 Portfolio 不会越权修改已经做出的正式 Scale Decision.
+
+### 跨区域 Benchmark
+
+新增跨区 Benchmark：
+
+- Data Readiness
+- Execution
+- Value
+- Value Gap
+- Repeatability
+- Repeatability Gap
+- 资源负荷
+
+华东一区作为当前 Pilot 基准.
+
+候选区域在正式运行以前：
+
+```text
+Value = 未验证
+Repeatability = 未验证
+```
+
+不会用候选分或准备度冒充真实业务结果.
+
+### Portfolio Executive Review
+
+可以在 Portfolio 底部生成季度总部 Review.
+
+Review 会固化生成时的快照：
+
+- 当前情景
+- 正式扩区区域
+- 下一候选
+- Wave 预算 / 并行容量
+- 共享资源冲突
+- Champion Pattern 跨区复现
+- 总部需要处理的 Top Management Actions
+
+生成以后, 后续页面状态变化不会自动重写该 Review.
+
+需要更新时点击：
+
+```text
+刷新 Review
+```
+
+同时支持：
+
+```text
+打印 / 导出 PDF
+```
+
+因此可以模拟季度管理层汇报材料.
+
+### 当前总部级完整链路
+
+```text
+Pilot
+↓
+Scale Gate
+↓
+90 天正式扩区
+↓
+Value / Repeatability Evidence
+↓
+Scale Portfolio
+↓
+Wave 1 / Wave 2 / Wave 3
+↓
+情景预算与并行容量
+↓
+跨区域 Benchmark
+↓
+共享资源调度
+↓
+Champion Pattern 跨区复制
+↓
+Portfolio Executive Review
+↓
+下一轮 Scale Decision
+```
+
+以上仍然全部运行在浏览器前端状态中.
+
 ## 本轮 Scale Portfolio Command Center
 
 当前原型已经从“单一区域扩区计划”继续升级到总部级多区域组合运营。
