@@ -62,9 +62,26 @@ async function run() {
 
   const nba = await json("/api/nba/generate", {
     method: "POST",
-    body: JSON.stringify({ type: "hospital", actor: "Smoke Test", context: { hospitalId: "h1" } })
+    body: JSON.stringify({ type: "hospital", actor: "Smoke Test", role: "地区经理", targetId: "h1", context: { hospitalId: "h1" } })
   });
   assert(nba.text && nba.text.length > 20, "NBA should return generated text");
+  assert(nba.context && nba.context.targetId === "h1", "NBA should persist ContextSnapshot");
+  assert(nba.decision && typeof nba.decision.priorityScore === "number", "NBA should return Decision");
+  assert(nba.nba && nba.nba.id, "NBA should return structured NBA entity");
+  assert(Array.isArray(nba.rules), "NBA should expose applied rules");
+
+  const outcome = await json("/api/domain/outcomes", {
+    method: "POST",
+    body: JSON.stringify({
+      nbaId: nba.nba.id,
+      result: "已达成",
+      signal: "Smoke test business signal",
+      evidence: "test evidence",
+      effectiveness: 90,
+      actor: "Smoke Test"
+    })
+  });
+  assert(outcome.outcome && outcome.outcome.effectiveness === 90, "Outcome should persist");
 
   const rule = await json("/api/rules", {
     method: "POST",
@@ -79,6 +96,18 @@ async function run() {
   });
   assert(rule.rule && rule.rule.id, "rule should receive an id");
 
+  const hospitals = await json("/api/domain/hospitals");
+  assert(Array.isArray(hospitals.hospitals) && hospitals.hospitals.length >= 3, "hospital domain should be available");
+
+  const hospital = await json("/api/domain/hospitals/h1");
+  assert(hospital.hospital && Array.isArray(hospital.doctors), "hospital 360 should include doctors");
+
+  const decisions = await json("/api/domain/decisions");
+  assert(Array.isArray(decisions.decisions) && decisions.decisions.length >= 1, "decision trace should persist");
+
+  const outcomes = await json("/api/domain/outcomes");
+  assert(Array.isArray(outcomes.outcomes) && outcomes.outcomes.length >= 1, "outcome list should persist");
+
   const org = await json("/api/org");
   assert(org.organization && Array.isArray(org.users), "organization payload should be available");
 
@@ -92,7 +121,9 @@ async function run() {
   console.log("✓ health");
   console.log("✓ session");
   console.log("✓ action persistence");
-  console.log("✓ NBA API");
+  console.log("✓ structured NBA / Decision Trace");
+  console.log("✓ Outcome feedback");
+  console.log("✓ Hospital 360 domain API");
   console.log("✓ rule persistence");
   console.log("✓ organization");
   console.log("✓ audit");
