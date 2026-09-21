@@ -2,6 +2,8 @@
 
 当前仓库提供一个零依赖 Node.js Pilot Runtime。前端通过 `api-client.js` 调用 REST API；如果 API 不可用，自动回退到 `mock-api.js`。
 
+v0.4 开始，服务端已经引入正式领域模型和结构化 Decision Engine。一次 NBA 生成不再只返回自然语言文本，而会产生并持久化 `ContextSnapshot → Decision → NBA`。
+
 ## Runtime
 
 启动：
@@ -94,43 +96,96 @@ Request:
 
 ### POST /api/nba/generate
 
-统一 NBA 生成入口。
+统一结构化 Decision Engine 入口。
 
 Request:
 
 ```json
 {
-  "type": "hospital",
-  "actor": "李明",
+  "type": "doctor",
+  "actor": "张蕾",
+  "role": "医药代表",
+  "targetId": "d1",
   "context": {
-    "role": "地区经理",
-    "route": "hospital"
+    "doctorId": "d1",
+    "hospitalId": "h1"
   }
 }
 ```
 
-`type` 当前支持：
+`type` 支持：
 
 - hospital
 - doctor
 - coaching
 - cockpit
 
-后续真实模型接入时保持该接口稳定，将内部 Mock Decision Engine 替换为：
+Response 核心结构：
+
+```json
+{
+  "ok": true,
+  "type": "doctor",
+  "text": "WHO: ... WHEN: ... WHAT: ...",
+  "context": {
+    "id": "ctx-...",
+    "targetType": "doctor",
+    "targetId": "d1",
+    "facts": [],
+    "signals": [],
+    "constraints": [],
+    "evidenceRefs": []
+  },
+  "decision": {
+    "id": "dec-...",
+    "decisionType": "doctor",
+    "priorityScore": 93,
+    "rationale": "...",
+    "ruleIds": ["R-019", "R-031"],
+    "riskLevel": "low",
+    "humanReviewRequired": false
+  },
+  "nba": {
+    "id": "nba-...",
+    "who": "周敏",
+    "when": "...",
+    "what": "...",
+    "why": "...",
+    "success": "..."
+  },
+  "rules": []
+}
+```
+
+服务端同时持久化：
+
+```text
+ContextSnapshot
+Decision
+NBA
+Rule usage
+AuditEvent
+```
+
+Decision Pipeline：
 
 ```text
 Context Builder
   ↓
-Policy / Guardrail
-  ↓
 Decision Rule Retrieval
   ↓
-LLM / Decision Engine
+Rule Scoring
   ↓
-Evidence Validator
+Priority Calculation
   ↓
-NBA Structured Output
+Structured Decision
+  ↓
+Structured NBA
+  ↓
+Audit + Persistence
 ```
+
+后续接入 LLM 时应保持响应 Schema 稳定，而不是让页面直接依赖模型自由文本。
 
 ### POST /api/visits/transcribe
 
@@ -240,6 +295,86 @@ Organization
 - visit.transcribe
 - rule.create
 - crm.sync
+
+
+## Domain API
+
+### GET /api/domain/hospitals
+
+返回医院主数据和当前作战状态。
+
+### GET /api/domain/hospitals/:id
+
+返回 Hospital 360：
+
+- hospital
+- doctors
+- visits
+
+### GET /api/domain/doctors
+
+支持：
+
+```text
+?hospitalId=h1
+```
+
+### GET /api/domain/doctors/:id
+
+返回 Doctor 360：
+
+- doctor
+- hospital
+- visits
+
+### GET /api/domain/visits
+
+支持：
+
+- hospitalId
+- doctorId
+- repUserId
+
+### GET /api/domain/visits/:id
+
+返回拜访、医生和医院关联信息。
+
+### GET /api/domain/decisions
+
+返回最近持久化的：
+
+- decisions
+- nbas
+
+用于 Decision Trace、审计和 Learning Engine。
+
+### POST /api/domain/outcomes
+
+执行 NBA 后回写真实业务结果。
+
+Request：
+
+```json
+{
+  "nbaId": "nba-...",
+  "result": "已达成",
+  "signal": "周主任同意在周三 MDT 讨论一例匹配患者",
+  "evidence": "会议确认记录",
+  "effectiveness": 90,
+  "actor": "张蕾"
+}
+```
+
+Outcome 的关键不是“任务完成”，而是可验证的客户行为或业务状态变化。
+
+### GET /api/domain/outcomes
+
+返回 Outcome 历史，用于：
+
+- Rule Validation
+- Learning Engine
+- Pilot Value Measurement
+
 
 ## 前端容错
 
