@@ -126,6 +126,8 @@
     scalePortfolioScenario: saved.scalePortfolioScenario || "balanced",
     scalePortfolioReview: saved.scalePortfolioReview || null,
     rolloutAlertStates: saved.rolloutAlertStates || {},
+    rolloutRootCauseAlertId: saved.rolloutRootCauseAlertId || null,
+    rolloutRecoveryStatus: saved.rolloutRecoveryStatus || {},
     rolloutDecisionLog: saved.rolloutDecisionLog || [],
     rolloutImpactDecisionId: saved.rolloutImpactDecisionId || null,
     rolloutWhatIfScenario: saved.rolloutWhatIfScenario || "pause-region",
@@ -206,6 +208,8 @@
       scalePortfolioScenario: state.scalePortfolioScenario,
       scalePortfolioReview: state.scalePortfolioReview,
       rolloutAlertStates: state.rolloutAlertStates,
+      rolloutRootCauseAlertId: state.rolloutRootCauseAlertId,
+      rolloutRecoveryStatus: state.rolloutRecoveryStatus,
       rolloutDecisionLog: state.rolloutDecisionLog,
       rolloutImpactDecisionId: state.rolloutImpactDecisionId,
       rolloutWhatIfScenario: state.rolloutWhatIfScenario,
@@ -4316,6 +4320,306 @@
     return alerts;
   }
 
+  function rolloutAlertById(id) {
+    return (rolloutAlerts() || []).find(function(a){return a.id===id;}) || null;
+  }
+
+  function selectedRolloutRootCauseAlert() {
+    var alerts=rolloutAlerts();
+    if (!alerts.length) return null;
+    var selected=alerts.find(function(a){return a.id===state.rolloutRootCauseAlertId;});
+    return selected || alerts[0];
+  }
+
+  function rolloutRootCauseContext(alert) {
+    if (!alert) return [];
+    var regions=scalePortfolioRegions();
+    var activeId=portfolioActiveTargetId();
+    var active=regions.find(function(r){return r.id===activeId;}) || null;
+    var nodes=[];
+
+    if (alert.source==="Wave Planning") {
+      var waveId=String(alert.id || "").replace("wave-","");
+      var wave=portfolioWaveDefinitions().find(function(w){return w.id===waveId;}) || portfolioWaveDefinitions()[0];
+      var summary=portfolioWaveSummary(regions,wave.id);
+      var scenario=portfolioScenarioMeta(state.scalePortfolioScenario);
+      nodes=[
+        {stage:"CONTEXT",title:scenario.label + "情景",detail:"单 Wave 容量 " + scenario.budget + " 资源点, 并行上限 " + scenario.parallel + ".",tone:"context"},
+        {stage:"DECISION",title:wave.quarter + " 当前安排 " + summary.regions.length + " 个区域",detail:summary.regions.map(function(r){return r.name + " · " + portfolioPaceMeta(portfolioRegionPace(r.id)).label;}).join(" / ") || "当前无区域.",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:"Wave 容量门槛未闭环",detail:"当前 " + summary.budget + "/" + summary.capacity + " 资源点, 并行 " + summary.running + "/" + summary.parallel + ".",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"总部并行 Rollout 存在挤兑",detail:"继续加速会挤占共享医学、数据、销售卓越或管理资源.",tone:"impact"}
+      ];
+    } else if (alert.source==="Shared Resource") {
+      var resourceId=String(alert.id || "").replace("resource-","");
+      var resource=portfolioResourceDefinitions().find(function(r){return r.id===resourceId;});
+      var reservedId=(state.scalePortfolioResourcePlan || {})[resourceId];
+      var reserved=regions.find(function(r){return r.id===reservedId;});
+      nodes=[
+        {stage:"CONTEXT",title:(resource ? resource.name : resourceId) + " 是共享稀缺资源",detail:resource ? resource.note : "跨区域共享资源.",tone:"context"},
+        {stage:"DECISION",title:reserved ? "额外预留给 " + reserved.name : "当前同时服务 Pilot 与正式 Scale",detail:"Pilot 基准区和正式扩区会持续占用至少 2 份核心资源.",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:"预留前未满足容量缓冲",detail:"当前使用 " + (resource ? portfolioResourceUsage(resource.id) : "-") + "/" + (resource ? resource.capacity : "-") + ".",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"其他区域关键动作可能等待资源",detail:"资源冲突会直接降低并行扩区的可执行性, 但不会自动改变既有 Gate.",tone:"impact"}
+      ];
+    } else if (alert.source==="90-Day Execution") {
+      var plan=state.scaleExecutionPlan;
+      var variance=plan ? scalePlanVariance(plan) : {expected:0,actual:0,delta:0,status:""};
+      var risks=plan ? scaleExecutionRiskRegister(plan) : [];
+      var firstRisk=risks[0];
+      nodes=[
+        {stage:"CONTEXT",title:(plan ? plan.target : "正式扩区") + " 已进入 90 天执行",detail:"当前模拟执行日 Day " + Number(state.scaleExecutionDay || 1) + ".",tone:"context"},
+        {stage:"DECISION",title:"正式扩区继续按当前 Gate 推进",detail:"计划进度 " + variance.expected + "%, 实际进度 " + variance.actual + "%.",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:firstRisk ? firstRisk.title : "阶段任务未按计划关闭",detail:firstRisk ? firstRisk.reason : "仍存在未完成或风险任务.",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"后续 Value / Repeatability 证据可能延迟",detail:"当前偏差 " + (variance.delta>0?"+":"") + variance.delta + "pp, 风险 / 延期 " + risks.length + " 项.",tone:"impact"}
+      ];
+    } else if (alert.source==="Recovery Plan") {
+      var total=0, committed=0, uncommitted=[];
+      Object.keys(state.scaleRecoveryPlans || {}).forEach(function(key){
+        (state.scaleRecoveryPlans[key] || []).forEach(function(x){
+          total+=1;
+          if (x.committed) committed+=1;
+          else uncommitted.push(x);
+        });
+      });
+      nodes=[
+        {stage:"CONTEXT",title:"Management Gate 带条件继续或暂缓",detail:"当前存在 " + total + " 项恢复动作.",tone:"context"},
+        {stage:"DECISION",title:"恢复计划已经生成",detail:"系统已经为未完成事项分配 Owner / Action / Due Day.",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:"Owner Commitment 未完成",detail:committed + "/" + total + " 项明确承诺. " + (uncommitted[0] ? uncommitted[0].owner + " 仍未确认 “" + uncommitted[0].title + "”." : ""),tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"Gate 结论缺少执行责任闭环",detail:"恢复动作没有 Owner 明确承诺时, 有条件通过容易退化成状态标签.",tone:"impact"}
+      ];
+    } else if (alert.source==="Value Gate") {
+      var value=scaleEvidenceStatus("value");
+      var g30=state.scaleExecutionGateReviews.g30;
+      nodes=[
+        {stage:"CONTEXT",title:"Day 30 已进入 Value 阶段",detail:g30 ? "Launch Gate · " + g30.label : "Launch Gate 尚未完成.",tone:"context"},
+        {stage:"DECISION",title:"继续验证 Action 是否改变客户行为",detail:"Day " + Number(state.scaleExecutionDay || 1) + " 已进入 Value Gate 窗口.",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:"必选 Value Evidence 未齐",detail:value.requiredDone + "/" + value.requiredTotal + " 个必选证据已验证.",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"不能证明扩区已经产生业务价值",detail:"NBA 采纳、Action 完成、正向 Outcome 任一缺失时, Day 60 不能直接通过.",tone:"impact"}
+      ];
+    } else if (alert.source==="Scale Review") {
+      var repeat=scaleEvidenceStatus("repeatability");
+      var g60=state.scaleExecutionGateReviews.g60;
+      nodes=[
+        {stage:"CONTEXT",title:"Day 60 已进入 Repeatability 阶段",detail:g60 ? "Value Gate · " + g60.label : "Value Gate 尚未完成.",tone:"context"},
+        {stage:"DECISION",title:"开始验证成功打法是否可复制",detail:"当前需要验证 Champion Pattern / Decision Rule / Management Closure.",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:"复制证据未齐",detail:repeat.requiredDone + "/" + repeat.requiredTotal + " 个必选证据已验证.",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"下一轮全国扩区缺少可复制依据",detail:"没有 Repeatability 证据时, 新区域只能做准备, 不应当被当成已证明打法.",tone:"impact"}
+      ];
+    } else if (alert.source==="Portfolio Pace") {
+      nodes=[
+        {stage:"CONTEXT",title:active ? active.name + " 已进入正式 Scale" : "正式扩区运行中",detail:"正式 90 天计划与总部 Portfolio 是两层状态.",tone:"context"},
+        {stage:"DECISION",title:"总部组合层将区域标记为暂停",detail:"Portfolio Pace = 暂停, 用于资源与 Wave 情景模拟.",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:"正式 Management Gate 尚未同步暂缓",detail:"组合层暂停不会自动改写已经生效的 90 天执行计划.",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"总部计划与区域正式执行可能不一致",detail:"如果暂停超过一个 Review 周期, 需要回到 Gate 正式记录 Hold 和恢复条件.",tone:"impact"}
+      ];
+    } else if (alert.source==="Portfolio Review") {
+      nodes=[
+        {stage:"CONTEXT",title:"季度 Review 是固定管理快照",detail:"生成后不会被后续 Portfolio 状态偷偷重写.",tone:"context"},
+        {stage:"DECISION",title:"Portfolio 情景或资源安排已经变化",detail:"当前情景 · " + portfolioScenarioMeta(state.scalePortfolioScenario).label + ".",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:"Review 快照未刷新",detail:state.scalePortfolioReview ? "快照仍是 " + state.scalePortfolioReview.scenario + " 情景." : "当前没有季度快照.",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"总部会议可能基于过期组合结论",detail:"Wave 容量、下一候选和资源冲突结论可能已经改变.",tone:"impact"}
+      ];
+    } else if (alert.source==="Wave Readiness") {
+      var candidateId=String(alert.id || "").replace("candidate-readiness-","");
+      var candidate=regions.find(function(r){return r.id===candidateId;});
+      nodes=[
+        {stage:"CONTEXT",title:(candidate ? candidate.name : "候选区域") + " 被提前排入 Wave 1",detail:"Wave 代表总部准备顺序, 不代表正式 Gate 通过.",tone:"context"},
+        {stage:"DECISION",title:"候选区域提前进入当前季度准备",detail:candidate ? "Data Readiness " + candidate.data + "%." : "数据准备度不足.",tone:"decision"},
+        {stage:"MISSED CLOSURE",title:"数据门槛尚未补齐",detail:"主数据、画像、能力基线或 Evidence Scope 仍需要准备.",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"提前准备可能挤占正式扩区资源",detail:"如果同时增加医学 / 数据 / 销售卓越资源, 会抬高当前 Wave 压力.",tone:"impact"}
+      ];
+    } else {
+      nodes=[
+        {stage:"CONTEXT",title:alert.source || "Control Tower",detail:alert.detail || "",tone:"context"},
+        {stage:"MISSED CLOSURE",title:alert.title || "当前异常",detail:alert.action || "需要管理层处理.",tone:"miss"},
+        {stage:"CURRENT IMPACT",title:"异常仍然存在",detail:"只有底层原因消失后, Control Tower 才会真正移除该异常.",tone:"impact"}
+      ];
+    }
+    return nodes;
+  }
+
+  function rolloutAlertClosureEvidence(alert) {
+    if (!alert) return {passed:false,label:"等待选择异常",detail:""};
+    var regions=scalePortfolioRegions();
+    if (alert.source==="Wave Planning") {
+      var waveId=String(alert.id || "").replace("wave-","");
+      var s=portfolioWaveSummary(regions,waveId);
+      return {passed:!s.budgetOver && !s.parallelOver,label:"Wave 回到容量内",detail:s.budget + "/" + s.capacity + " 资源点 · 并行 " + s.running + "/" + s.parallel};
+    }
+    if (alert.source==="Shared Resource") {
+      var resourceId=String(alert.id || "").replace("resource-","");
+      var resource=portfolioResourceDefinitions().find(function(r){return r.id===resourceId;});
+      return {passed:resource ? portfolioResourceUsage(resource.id)<=resource.capacity : false,label:"共享资源不再超限",detail:resource ? portfolioResourceUsage(resource.id) + "/" + resource.capacity : "-"};
+    }
+    if (alert.source==="90-Day Execution") {
+      var risks=state.scaleExecutionPlan ? scaleExecutionRiskRegister(state.scaleExecutionPlan) : [];
+      var variance=state.scaleExecutionPlan ? scalePlanVariance(state.scaleExecutionPlan) : {status:"behind"};
+      return {passed:risks.length===0 && variance.status!=="behind",label:"风险清零且计划不再落后",detail:"风险 " + risks.length + " · 偏差状态 " + (variance.status==="behind"?"落后":(variance.status==="ahead"?"领先":"按计划"))};
+    }
+    if (alert.source==="Recovery Plan") {
+      var total=0,committed=0;
+      Object.keys(state.scaleRecoveryPlans || {}).forEach(function(k){(state.scaleRecoveryPlans[k]||[]).forEach(function(x){total+=1;if(x.committed)committed+=1;});});
+      return {passed:total>0 && committed===total,label:"所有恢复动作完成 Owner Commitment",detail:committed + "/" + total};
+    }
+    if (alert.source==="Value Gate") {
+      var v=scaleEvidenceStatus("value");
+      return {passed:v.requiredPassed,label:"Value 必选证据全部验证",detail:v.requiredDone + "/" + v.requiredTotal};
+    }
+    if (alert.source==="Scale Review") {
+      var r=scaleEvidenceStatus("repeatability");
+      return {passed:r.requiredPassed,label:"Repeatability 必选证据全部验证",detail:r.requiredDone + "/" + r.requiredTotal};
+    }
+    if (alert.source==="Portfolio Pace") {
+      var activeId=portfolioActiveTargetId();
+      return {passed:!activeId || portfolioRegionPace(activeId)!=="pause",label:"正式扩区不再处于组合层暂停",detail:activeId ? portfolioPaceMeta(portfolioRegionPace(activeId)).label : "无正式扩区"};
+    }
+    if (alert.source==="Portfolio Review") {
+      var current=portfolioScenarioMeta(state.scalePortfolioScenario).label;
+      return {passed:!!state.scalePortfolioReview && state.scalePortfolioReview.scenario===current,label:"季度 Review 与当前情景一致",detail:state.scalePortfolioReview ? state.scalePortfolioReview.scenario + " vs " + current : "尚未生成 Review"};
+    }
+    if (alert.source==="Wave Readiness") {
+      var cid=String(alert.id || "").replace("candidate-readiness-","");
+      var candidate=regions.find(function(r){return r.id===cid;});
+      return {passed:!!candidate && candidate.data>=80,label:"候选区域 Data Readiness ≥80%",detail:candidate ? candidate.data + "%" : "-"};
+    }
+    return {passed:false,label:"底层异常原因消失",detail:"关闭按钮不会替代真实恢复."};
+  }
+
+  function rolloutRecoverySteps(alert) {
+    if (!alert) return [];
+    var route=rolloutAlertRoute(alert);
+    if (alert.source==="Wave Planning") return [
+      {id:"inspect",title:"确认超限来自预算还是并行",detail:"先看当前 Wave 的区域、节奏和资源点构成.",route:"portfolio"},
+      {id:"prioritize",title:"保护正式扩区, 调整候选区域",detail:"优先后移低准备度候选或降低候选节奏.",route:"portfolio"},
+      {id:"capacity",title:"重新计算 Wave / Shared Resource Capacity",detail:"预算与并行上限必须同时回到容量内.",route:"portfolio"},
+      {id:"review",title:"刷新季度 Executive Review",detail:"用恢复后的组合重新固化总部快照.",route:"portfolio"}
+    ];
+    if (alert.source==="Shared Resource") return [
+      {id:"scope",title:"定位是哪项预留导致资源超过容量",detail:"检查 Pilot、正式 Scale 与候选预留三类占用.",route:"portfolio"},
+      {id:"release",title:"取消低优先区域预留或降低并行度",detail:"优先保护正式扩区已经承诺的关键资源.",route:"portfolio"},
+      {id:"verify",title:"确认资源使用 ≤ Capacity",detail:"Control Tower 会基于底层使用量自动重新计算.",route:"portfolio"},
+      {id:"review",title:"刷新季度 Executive Review",detail:"把新的资源边界带回总部 Review.",route:"portfolio"}
+    ];
+    if (alert.source==="90-Day Execution") return [
+      {id:"risk",title:"进入 Risk & Delay Register",detail:"定位延期任务、Owner 和阶段窗口.",route:"scaleplan"},
+      {id:"owner",title:"确认 Owner 恢复动作与 Due Day",detail:"高风险项必须有可检查 Success Evidence.",route:"scaleplan"},
+      {id:"close",title:"完成任务并清除风险标记",detail:"只有底层任务真实完成, 风险才从控制塔退出.",route:"scaleplan"},
+      {id:"gate",title:"重新检查阶段 Gate",detail:"不要用 Portfolio 节奏覆盖正式 Execution Gate.",route:"scaleplan"}
+    ];
+    if (alert.source==="Recovery Plan") return [
+      {id:"list",title:"打开 Gate Review 恢复计划",detail:"逐项检查尚未承诺的 Owner Action.",route:"scaleplan"},
+      {id:"commit",title:"补齐所有 Owner Commitment",detail:"每项恢复动作需要负责人明确确认.",route:"scaleplan"},
+      {id:"evidence",title:"准备 Success Evidence",detail:"承诺之后仍要在 Due Day 前形成可检查证据.",route:"scaleplan"},
+      {id:"review",title:"重新进行 Gate Review",detail:"恢复动作完成后再决定通过 / 有条件通过 / 暂缓.",route:"scaleplan"}
+    ];
+    if (alert.source==="Value Gate") return [
+      {id:"nba",title:"验证 NBA 采纳 ≥70%",detail:"确认代表真正采用高优先 NBA.",route:"scaleplan"},
+      {id:"action",title:"验证 Action 完成 ≥70%",detail:"采纳之后必须进入实际执行.",route:"scaleplan"},
+      {id:"outcome",title:"验证至少 2 类正向 Outcome",detail:"证明客户行为或业务里程碑发生变化.",route:"scaleplan"},
+      {id:"gate",title:"重新进行 Day 60 Value Gate",detail:"必选证据齐全后才允许直接通过.",route:"scaleplan"}
+    ];
+    if (alert.source==="Scale Review") return [
+      {id:"pattern",title:"验证 Champion Pattern 跨场景复现",detail:"至少 2-3 个同类场景出现同一正向机制.",route:"scaleplan"},
+      {id:"rule",title:"补齐 Decision Rule 证据链",detail:"Context → Decision → Action → Outcome 可追溯.",route:"scaleplan"},
+      {id:"closure",title:"验证管理闭环稳定运行",detail:"风险、资源、Owner 承诺能持续闭环.",route:"scaleplan"},
+      {id:"gate",title:"重新进行 Day 90 Scale Review",detail:"Repeatability Evidence 齐全后再做下一轮 Scale.",route:"scaleplan"}
+    ];
+    if (alert.source==="Portfolio Pace") return [
+      {id:"intent",title:"确认暂停是临时模拟还是正式经营决定",detail:"先区分 Portfolio 情景与正式执行.",route:"portfolio"},
+      {id:"gate",title:"如需正式暂停, 回到 Management Gate",detail:"正式扩区状态必须由 Gate 记录 Hold.",route:"scaleplan"},
+      {id:"recovery",title:"明确恢复条件和 Owner",detail:"暂停不是终态, 必须定义何时恢复.",route:"scaleplan"},
+      {id:"sync",title:"同步 Portfolio 与季度 Review",detail:"正式 Gate 变化后再刷新总部组合.",route:"portfolio"}
+    ];
+    if (alert.source==="Portfolio Review") return [
+      {id:"inspect",title:"确认 Review 后发生了哪些组合变化",detail:"检查情景、Wave、资源和候选区域变化.",route:"portfolio"},
+      {id:"refresh",title:"重新生成 Portfolio Executive Review",detail:"固化当前最新管理快照.",route:"portfolio"},
+      {id:"share",title:"用新 Review 替代旧会议材料",detail:"避免管理层继续引用已经过期的结论.",route:"portfolio"}
+    ];
+    if (alert.source==="Wave Readiness") return [
+      {id:"data",title:"补齐医院 / 医生 / 代表主数据",detail:"优先解决会阻塞正式复制的数据缺口.",route:"portfolio"},
+      {id:"baseline",title:"完成代表能力基线与 Evidence Scope",detail:"不要只因排入 Wave 就提前承诺业务价值.",route:"portfolio"},
+      {id:"capacity",title:"重新评估当前季度资源占用",detail:"准备动作也会占用总部稀缺资源.",route:"portfolio"},
+      {id:"gate",title:"达到准备门槛后再进入正式 Scale Gate",detail:"Wave 规划永远不能替代 Scale Decision.",route:"pilot"}
+    ];
+    return [
+      {id:"inspect",title:"确认底层触发条件",detail:alert.detail || "",route:route},
+      {id:"owner",title:"确认 Owner 与下一步动作",detail:alert.action || "需要管理层处理.",route:route},
+      {id:"evidence",title:"用真实状态验证恢复",detail:"不要只关闭告警卡片.",route:route}
+    ];
+  }
+
+  function rolloutRelevantDecisions(alert) {
+    if (!alert) return [];
+    var history=rolloutDecisionHistory();
+    var resourceId=alert.source==="Shared Resource" ? String(alert.id||"").replace("resource-","") : null;
+    var candidateId=alert.source==="Wave Readiness" ? String(alert.id||"").replace("candidate-readiness-","") : null;
+    var types=[];
+    if (alert.source==="Wave Planning") types=["wave","pace","candidate","what-if","draft","review"];
+    else if (alert.source==="Shared Resource") types=["resource","wave","pace","what-if","review"];
+    else if (alert.source==="90-Day Execution" || alert.source==="Recovery Plan" || alert.source==="Value Gate" || alert.source==="Scale Review") types=["scale","alert","management","review"];
+    else if (alert.source==="Portfolio Pace") types=["pace","wave","scale","what-if"];
+    else if (alert.source==="Portfolio Review") types=["review","wave","pace","resource","candidate","what-if","draft"];
+    else if (alert.source==="Wave Readiness") types=["candidate","wave","pace","resource"];
+    else types=["alert","scale","management","wave","pace","resource","what-if"];
+
+    var rows=history.filter(function(x){
+      var type=String(x.type||"").toLowerCase();
+      if (types.indexOf(type)<0 && types.indexOf(String(x.type||""))<0) return false;
+      if (resourceId && x.meta && x.meta.resourceId && x.meta.resourceId!==resourceId) return false;
+      if (candidateId && x.meta && x.meta.regionId && x.meta.regionId!==candidateId) return false;
+      return true;
+    }).slice(0,7);
+    return rows.reverse();
+  }
+
+  function rolloutRecoveryKey(alertId,stepId) {
+    return alertId + "::" + stepId;
+  }
+
+  function toggleRolloutRecoveryStep(alertId,stepId) {
+    if (!state.rolloutRecoveryStatus) state.rolloutRecoveryStatus={};
+    var key=rolloutRecoveryKey(alertId,stepId);
+    state.rolloutRecoveryStatus[key]=!state.rolloutRecoveryStatus[key];
+    saveState();
+    render();
+  }
+
+  function selectRolloutRootCause(id) {
+    state.rolloutRootCauseAlertId=id;
+    saveState();
+    render();
+    setTimeout(function(){
+      var node=$("#rootCauseWorkbench");
+      if (node) node.scrollIntoView({behavior:"smooth",block:"start"});
+    },50);
+  }
+
+  function renderRolloutRootCauseWorkbench() {
+    var alert=selectedRolloutRootCauseAlert();
+    if (!alert) {
+      return '<section class="tower-section root-cause-workbench" id="rootCauseWorkbench"><div class="tower-empty-good"><strong>当前没有可分析异常</strong><span>当 Wave / Gate / Resource / Evidence 出现问题时, 这里会自动生成根因路径.</span></div></section>';
+    }
+    var chain=rolloutRootCauseContext(alert);
+    var decisions=rolloutRelevantDecisions(alert);
+    var steps=rolloutRecoverySteps(alert);
+    var closure=rolloutAlertClosureEvidence(alert);
+    var done=steps.filter(function(s){return !!(state.rolloutRecoveryStatus||{})[rolloutRecoveryKey(alert.id,s.id)];}).length;
+
+    var chainHtml=chain.map(function(n,i){
+      return '<div class="root-cause-node ' + esc(n.tone) + '"><span>' + esc(n.stage) + '</span><strong>' + esc(n.title) + '</strong><p>' + esc(n.detail) + '</p></div>' + (i<chain.length-1?'<em>→</em>':'');
+    }).join("");
+
+    var replay=decisions.length ? decisions.map(function(d,i){
+      return '<button class="decision-replay-row" data-rollout-replay-decision="' + d.id + '"><span>0' + (i+1) + '</span><div><strong>' + esc(d.title) + '</strong><p>' + esc(d.detail) + '</p><small>' + esc((d.at||"").slice(0,16).replace("T"," ")) + ' · ' + esc(d.actor || "管理层") + '</small></div></button>';
+    }).join("") : '<div class="brief-muted">当前没有匹配到可回放的管理决策. 这通常表示异常来自底层状态自然累积, 而不是一次显式总部动作.</div>';
+
+    var recovery=steps.map(function(s,i){
+      var checked=!!(state.rolloutRecoveryStatus||{})[rolloutRecoveryKey(alert.id,s.id)];
+      return '<div class="recovery-sequence-row ' + (checked?"done":"") + '"><button class="recovery-check" data-rollout-recovery-alert="' + alert.id + '" data-rollout-recovery-step="' + s.id + '"><span>' + (checked?"✓":"") + '</span></button><div><b>0' + (i+1) + '</b><strong>' + esc(s.title) + '</strong><p>' + esc(s.detail) + '</p></div><button class="recovery-route" data-rollout-recovery-route="' + esc(s.route || rolloutAlertRoute(alert)) + '">进入处理</button></div>';
+    }).join("");
+
+    return '<section class="tower-section root-cause-workbench" id="rootCauseWorkbench"><div class="tower-section-head"><div><span>ROOT CAUSE WORKBENCH</span><h2>' + esc(alert.title) + '</h2><p>从最早 Context 偏离开始, 回放相关 Decision, 找到未闭环节点, 再按恢复顺序处理.</p></div><div class="root-cause-status"><b>' + (alert.severity==="high"?"P1":alert.severity==="medium"?"P2":"P3") + '</b><span>' + esc(alert.source) + '</span></div></div><div class="root-cause-chain">' + chainHtml + '</div><div class="root-cause-grid"><div><div class="tower-subtitle">DECISION REPLAY</div><div class="decision-replay-list">' + replay + '</div></div><div><div class="tower-subtitle">RECOVERY SEQUENCE · ' + done + '/' + steps.length + '</div><div class="recovery-sequence-list">' + recovery + '</div><div class="closure-evidence ' + (closure.passed?"passed":"pending") + '"><span>CLOSING EVIDENCE</span><strong>' + (closure.passed?"✓ ":"") + esc(closure.label) + '</strong><p>' + esc(closure.detail) + '</p><small>' + (closure.passed ? "底层关闭条件已经满足. 下一次异常重算会自动退出." : "人工勾选恢复步骤不会关闭异常. 必须满足这个底层条件.") + '</small></div></div></div></section>';
+  }
+
   function rolloutDependencies() {
     var regions=scalePortfolioRegions();
     var waveRisk=portfolioWaveDefinitions().some(function(w){
@@ -4748,7 +5052,7 @@
 
     var alertCards=open.map(function(a){
       var st=rolloutAlertState(a.id,a.severity);
-      return '<article class="tower-alert ' + a.severity + ' ' + st + '"><div class="tower-alert-head"><div><span>' + esc(a.source) + '</span><strong>' + esc(a.title) + '</strong></div><b>' + (a.severity==="high"?"P1":(a.severity==="medium"?"P2":"P3")) + '</b></div><p>' + esc(a.detail) + '</p><small>Owner · ' + esc(a.owner) + ' · Next · ' + esc(a.action) + '</small><div class="tower-alert-actions"><button data-rollout-alert-route="' + rolloutAlertRoute(a) + '">处理</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="acknowledged" ' + (st==="acknowledged"?"disabled":"") + '>确认</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="escalated" ' + (st==="escalated"?"disabled":"") + '>升级</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="resolved">关闭</button></div></article>';
+      return '<article class="tower-alert ' + a.severity + ' ' + st + '"><div class="tower-alert-head"><div><span>' + esc(a.source) + '</span><strong>' + esc(a.title) + '</strong></div><b>' + (a.severity==="high"?"P1":(a.severity==="medium"?"P2":"P3")) + '</b></div><p>' + esc(a.detail) + '</p><small>Owner · ' + esc(a.owner) + ' · Next · ' + esc(a.action) + '</small><div class="tower-alert-actions"><button data-rollout-rootcause="' + a.id + '">根因</button><button data-rollout-alert-route="' + rolloutAlertRoute(a) + '">处理</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="acknowledged" ' + (st==="acknowledged"?"disabled":"") + '>确认</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="escalated" ' + (st==="escalated"?"disabled":"") + '>升级</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="resolved">关闭</button></div></article>';
     }).join("");
 
     var dependencyRows=deps.map(function(d){
@@ -4759,6 +5063,7 @@
       '<section class="tower-hero"><div><span>NATIONAL ROLLOUT CONTROL TOWER</span><h1>全国推广真正需要盯的不是页面数量, 而是依赖、异常、资源与决策</h1><p>Control Tower 从现有 Pilot、90 天 Scale、Wave Planning、Evidence 和一线 Demo 数据动态汇总, 不建立第二套脱节状态.</p></div><div><strong>' + open.length + '</strong><span>当前异常</span><button class="tower-hero-link" data-route-jump="portfolio">Scale Portfolio</button></div></section>' +
       '<section class="tower-kpis"><div class="' + (open.length?"risk":"good") + '"><span>开放异常</span><strong>' + open.length + '</strong><small>P1/P2/P3</small></div><div class="' + (escalated?"risk":"") + '"><span>已升级总部</span><strong>' + escalated + '</strong><small>需管理层处理</small></div><div class="' + (blocked?"risk":"good") + '"><span>阻塞依赖</span><strong>' + blocked + '</strong><small>共 ' + deps.length + ' 条</small></div><div class="' + (waveRisk?"risk":"good") + '"><span>Wave 容量异常</span><strong>' + waveRisk + '</strong><small>预算 / 并行</small></div><div><span>正式扩区</span><strong>' + (portfolioActiveTargetId() ? "1" : "0") + '</strong><small>' + (state.scaleExecutionPlan ? esc(state.scaleExecutionPlan.target) : "尚未启动") + '</small></div></section>' +
       '<section class="tower-grid"><div class="tower-section"><div class="tower-section-head"><div><span>EXCEPTION CENTER</span><h2>异常与自动升级</h2><p>只显示当前真实状态触发的异常. 原因消失后, 异常会自动从列表退出.</p></div></div><div class="tower-alert-list">' + (alertCards || '<div class="tower-empty-good"><strong>当前没有开放异常</strong><span>Wave、资源、Gate 和 Evidence 均在可控范围.</span></div>') + '</div></div><div class="tower-section"><div class="tower-section-head"><div><span>DEPENDENCY MAP</span><h2>Rollout 依赖链</h2><p>前一层未通过时, 后一层即使页面上可操作, 也不应被当成正式经营进度.</p></div></div><div class="tower-dependency-list">' + dependencyRows + '</div></div></section>' +
+      renderRolloutRootCauseWorkbench() +
       renderRolloutWhatIf() +
       renderRolloutDrilldown() +
       renderRolloutImpactTrace() +
@@ -5704,6 +6009,42 @@
         saveState();
         render();
         window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-rollout-rootcause]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        selectRolloutRootCause(el.getAttribute("data-rollout-rootcause"));
+      });
+    });
+
+    $$("[data-rollout-recovery-alert]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        toggleRolloutRecoveryStep(
+          el.getAttribute("data-rollout-recovery-alert"),
+          el.getAttribute("data-rollout-recovery-step")
+        );
+      });
+    });
+
+    $$("[data-rollout-recovery-route]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.route=el.getAttribute("data-rollout-recovery-route") || "controltower";
+        saveState();
+        render();
+        window.scrollTo({top:0,behavior:"smooth"});
+      });
+    });
+
+    $$("[data-rollout-replay-decision]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.rolloutImpactDecisionId=el.getAttribute("data-rollout-replay-decision");
+        saveState();
+        render();
+        setTimeout(function(){
+          var trace=$(".tower-impact-trace");
+          if (trace) trace.scrollIntoView({behavior:"smooth",block:"center"});
+        },50);
       });
     });
 
