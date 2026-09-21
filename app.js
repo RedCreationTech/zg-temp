@@ -3309,16 +3309,19 @@
     var g30 = state.scaleExecutionGateReviews.g30;
     var g60 = state.scaleExecutionGateReviews.g60;
     var g90 = state.scaleExecutionGateReviews.g90;
+    var g30Advanced = !!(g30 && g30.status !== "hold");
+    var g60Advanced = !!(g60 && g60.status !== "hold");
+    var g90Advanced = !!(g90 && g90.status !== "hold");
     var wave = secondWaveLaunchStats(plan);
     var recoveryTotal = Object.keys(state.scaleRecoveryPlans || {}).reduce(function(sum,key){return sum+(state.scaleRecoveryPlans[key]||[]).length;},0);
     var recoveryCommitted = Object.keys(state.scaleRecoveryPlans || {}).reduce(function(sum,key){return sum+(state.scaleRecoveryPlans[key]||[]).filter(function(x){return x.committed;}).length;},0);
 
-    var stage = g90 ? "Day 90 Scale Review" : (g60 ? "61–90 天复制验证" : (g30 ? "31–60 天价值验证" : "0–30 天 Launch"));
-    var nextGate = !g30 ? "Day 30 Launch Gate" : (!g60 ? "Day 60 Value Gate" : (!g90 ? "Day 90 Scale Review" : "下一轮 Scale Decision"));
+    var stage = g90Advanced ? "Day 90 Scale Review" : (g60Advanced ? "61–90 天复制验证" : (g30Advanced ? "31–60 天价值验证" : "0–30 天 Launch"));
+    var nextGate = !g30Advanced ? "Day 30 Launch Gate" : (!g60Advanced ? "Day 60 Value Gate" : (!g90Advanced ? "Day 90 Scale Review" : "下一轮 Scale Decision"));
 
     return '<section class="scale-ops-cockpit"><div class="scale-ops-head"><div><span>SCALE OPERATIONS COCKPIT</span><h2>' + esc(plan.target) + ' · ' + esc(stage) + '</h2><p>把计划、风险、Gate、Owner 承诺和第二批启动收在一个运营视图里.</p></div><div><span>NEXT GATE</span><strong>' + esc(nextGate) + '</strong></div></div>' +
       '<div class="scale-ops-metrics"><div><span>总执行</span><strong>' + overall.pct + '%</strong><small>' + overall.done + '/' + overall.total + '</small></div><div><span>计划偏差</span><strong>' + (variance.delta>0?"+":"") + variance.delta + '%</strong><small>' + (variance.status==="behind"?"落后计划":(variance.status==="ahead"?"领先计划":"基本按计划")) + '</small></div><div><span>风险 / 延期</span><strong>' + risks.length + '</strong><small>需要恢复动作</small></div><div><span>恢复承诺</span><strong>' + recoveryCommitted + '/' + recoveryTotal + '</strong><small>Owner 已确认</small></div><div><span>第二批启动</span><strong>' + wave.started + '/' + wave.total + '</strong><small>医院 + 代表</small></div></div>' +
-      '<div class="scale-ops-flow"><div class="' + (g30?"done":"active") + '"><span>01</span><strong>Launch</strong><small>' + (g30?esc(g30.label):"进行中") + '</small></div><em>→</em><div class="' + (g60?"done":(g30?"active":"")) + '"><span>02</span><strong>Value</strong><small>' + (g60?esc(g60.label):(g30?"进行中":"待解锁")) + '</small></div><em>→</em><div class="' + (g90?"done":(g60?"active":"")) + '"><span>03</span><strong>Repeatability</strong><small>' + (g90?esc(g90.label):(g60?"进行中":"待解锁")) + '</small></div></div>' +
+      '<div class="scale-ops-flow"><div class="' + (g30Advanced?"done":"active") + '"><span>01</span><strong>Launch</strong><small>' + (g30?esc(g30.label):"进行中") + '</small></div><em>→</em><div class="' + (g60Advanced?"done":(g30Advanced?"active":"")) + '"><span>02</span><strong>Value</strong><small>' + (g60?esc(g60.label):(g30Advanced?"进行中":"待解锁")) + '</small></div><em>→</em><div class="' + (g90Advanced?"done":(g60Advanced?"active":"")) + '"><span>03</span><strong>Repeatability</strong><small>' + (g90?esc(g90.label):(g60Advanced?"进行中":"待解锁")) + '</small></div></div>' +
     '</section>';
   }
 
