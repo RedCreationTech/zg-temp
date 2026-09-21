@@ -75,3 +75,13 @@
 
 @media(max-width:1000px){.scenario-grid{grid-template-columns:1fr}.scenario-card{min-height:0}.demo-tour-bar{left:18px;right:18px;grid-template-columns:1fr}.demo-tour-progress{order:3}.demo-tour-actions{padding-right:0;justify-content:flex-end}}
 @media(max-width:650px){.scenario-heading{align-items:flex-start;flex-direction:column}.scenario-current{align-items:flex-start;flex-wrap:wrap}.demo-tour-launcher{right:14px;bottom:14px}.demo-tour-bar{bottom:12px}.demo-tour-copy p{display:none}}
+
+
+/* Agent handoff and coaching rewrite */
+.mb-16{margin-bottom:16px}.handoff-chain{display:grid;grid-template-columns:1fr 32px 1fr 32px 1fr 32px 1fr;gap:7px;align-items:stretch}
+.handoff-step{border:1px solid #e6ebf2;background:#fff;border-radius:12px;padding:11px;display:grid;grid-template-columns:28px 1fr;gap:9px;text-align:left;cursor:pointer;transition:.18s}
+.handoff-step:hover{border-color:#c7d4f7;transform:translateY(-1px)}.handoff-step.active{border-color:#9bb0ed;background:#f7f9ff}.handoff-step.done{background:#f4fbf8;border-color:#d9eee6}
+.handoff-no{width:26px;height:26px;border-radius:8px;background:#eef3ff;color:#5773cf;display:grid;place-items:center;font-size:8px;font-weight:800}
+.handoff-step.done .handoff-no{background:#e5f6ef;color:#218e68}.handoff-step span{display:block;font-size:7px;color:#98a3b4}.handoff-step strong{display:block;font-size:9px;color:#35435a;margin-top:2px}.handoff-step p{font-size:8px;color:#7d899c;line-height:1.45;margin:4px 0 0}.handoff-arrow{display:grid;place-items:center;color:#a9b4c4;font-size:15px}
+.rewrite-grid{display:grid;grid-template-columns:1fr 42px 1fr;gap:10px;align-items:stretch}.rewrite-card{padding:14px;border-radius:12px;border:1px solid #e8edf4}.rewrite-card.before{background:#fff8f5;border-color:#f1ded6}.rewrite-card.after{background:#f4f9ff;border-color:#dce6f8}.rewrite-card span{display:block;font-size:8px;color:#8c98aa;font-weight:800;letter-spacing:.4px}.rewrite-card p{font-size:10px;line-height:1.75;color:#46546b;margin:8px 0}.rewrite-card b{font-size:8px;color:#7a879a}.rewrite-card.after b{color:#5573cf}.rewrite-arrow{display:grid;place-items:center;font-size:18px;color:#8ea1d9}.coach-proof{margin-top:10px;padding:11px;border-radius:10px;background:#17233d;color:#fff;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}.coach-proof span{font-size:7px;color:#8698b9}.coach-proof strong{font-size:9px;color:#dfe7f6}.coach-proof .btn.soft{background:#26385f;border-color:#334a79;color:#dbe6ff}
+@media(max-width:1050px){.handoff-chain{grid-template-columns:1fr}.handoff-arrow{transform:rotate(90deg);height:14px}.rewrite-grid{grid-template-columns:1fr}.rewrite-arrow{transform:rotate(90deg);height:20px}.coach-proof{grid-template-columns:1fr}}
