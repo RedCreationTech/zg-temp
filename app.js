@@ -3789,6 +3789,7 @@
   }
 
   function renderPortfolioRegionCards(regions) {
+    var waveMap = portfolioWaveMap(regions);
     var filtered = regions.filter(function(r){
       if (state.scalePortfolioFilter === "active") return r.type === "current" || r.type === "active";
       if (state.scalePortfolioFilter === "candidate") return r.type === "candidate";
@@ -3800,10 +3801,12 @@
       var selected = r.id === state.scalePortfolioSelected;
       var valueText = r.value == null ? "未验证" : r.value + "%";
       var repeatText = r.repeatability == null ? "未验证" : r.repeatability + "%";
+      var wave = waveMap[r.id] === "baseline" ? "BASELINE" : String(waveMap[r.id] || "w3").toUpperCase();
+      var pace = r.id === "pilot-east1" ? "持续运行" : portfolioPaceMeta(portfolioRegionPace(r.id)).label;
       return '<button class="portfolio-region-card ' + stage.cls + (selected ? " selected" : "") + '" data-portfolio-region="' + r.id + '">' +
-        '<div class="portfolio-region-head"><div><span>' + esc(stage.label) + '</span><strong>' + esc(r.name) + '</strong></div><b>' + (r.type === "candidate" ? r.candidateScore : r.execution) + '</b></div>' +
+        '<div class="portfolio-region-head"><div><span>' + esc(stage.label) + ' · ' + esc(wave) + '</span><strong>' + esc(r.name) + '</strong></div><b>' + (r.type === "candidate" ? r.candidateScore : r.execution) + '</b></div>' +
         '<div class="portfolio-bars"><div><span>Data</span><div class="bar"><i style="width:' + r.data + '%"></i></div><b>' + r.data + '%</b></div><div><span>Value</span><div class="bar"><i style="width:' + (r.value == null ? 0 : r.value) + '%"></i></div><b>' + valueText + '</b></div><div><span>Repeat</span><div class="bar"><i style="width:' + (r.repeatability == null ? 0 : r.repeatability) + '%"></i></div><b>' + repeatText + '</b></div></div>' +
-        '<div class="portfolio-region-foot"><span>' + r.hospitals + ' 家医院 · ' + r.reps + ' 名代表</span><span>' + (r.risks ? r.risks + ' 风险' : '无当前风险') + '</span></div></button>';
+        '<div class="portfolio-region-foot"><span>' + r.hospitals + ' 家医院 · ' + r.reps + ' 名代表</span><span>' + esc(pace) + ' · ' + (r.risks ? r.risks + ' 风险' : '无当前风险') + '</span></div></button>';
     }).join("");
   }
 
