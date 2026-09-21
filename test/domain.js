@@ -10,6 +10,11 @@ const {
   createRule
 } = require("../lib/domain-model");
 const { runDecision } = require("../lib/decision-engine");
+const {
+  buildRuleValidation,
+  applySafeValidation,
+  reviewValidation
+} = require("../lib/learning-engine");
 
 const domain = ensureDomain(createSeedDomain());
 
@@ -89,6 +94,27 @@ const rule = createRule({
 assert.strictEqual(rule.confidence, 100);
 assert.strictEqual(rule.status, "testing");
 
+domain.contextSnapshots.push(doctorRun.context);
+domain.decisions.push(doctorRun.decision);
+domain.nbas.push(doctorRun.nba);
+domain.outcomes.push(outcome);
+domain.ruleValidations = [];
+
+const validations = buildRuleValidation(domain, outcome);
+assert.ok(validations.length >= 1);
+for (const validation of validations) {
+  domain.ruleValidations.push(validation);
+  applySafeValidation(domain, validation);
+}
+assert.ok(domain.ruleValidations.some(item => item.ruleId === "R-019"));
+
+const reviewCandidate = domain.ruleValidations.find(item => item.humanReviewRequired);
+if (reviewCandidate) {
+  const reviewed = reviewValidation(domain, reviewCandidate.id, "approve", "Test Reviewer");
+  assert.strictEqual(reviewed.validation.status, "approved");
+  assert.strictEqual(reviewed.validation.reviewedBy, "Test Reviewer");
+}
+
 console.log("✓ domain entities");
 console.log("✓ hospital decision");
 console.log("✓ doctor decision");
@@ -96,5 +122,7 @@ console.log("✓ coaching decision");
 console.log("✓ cockpit human review");
 console.log("✓ outcome entity");
 console.log("✓ decision rule validation");
+console.log("✓ outcome-driven rule validation");
+console.log("✓ human review gate");
 console.log("");
 console.log("ZG AI GPS domain test passed.");
