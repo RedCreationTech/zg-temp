@@ -108,6 +108,10 @@
     scaleExecutionDay: saved.scaleExecutionDay || 18,
     scaleExecutionRisks: saved.scaleExecutionRisks || {},
     scaleExecutionGateReviews: saved.scaleExecutionGateReviews || {},
+    scaleGateReviewSummaries: saved.scaleGateReviewSummaries || {},
+    scaleRecoveryPlans: saved.scaleRecoveryPlans || {},
+    scaleOwnerCommitments: saved.scaleOwnerCommitments || {},
+    scaleSecondWaveLaunch: saved.scaleSecondWaveLaunch || { hospitals:{}, reps:{}, startedAt:null },
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -167,6 +171,10 @@
       scaleExecutionDay: state.scaleExecutionDay,
       scaleExecutionRisks: state.scaleExecutionRisks,
       scaleExecutionGateReviews: state.scaleExecutionGateReviews,
+      scaleGateReviewSummaries: state.scaleGateReviewSummaries,
+      scaleRecoveryPlans: state.scaleRecoveryPlans,
+      scaleOwnerCommitments: state.scaleOwnerCommitments,
+      scaleSecondWaveLaunch: state.scaleSecondWaveLaunch,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -2946,6 +2954,10 @@
     state.scaleExecutionDay = 18;
     state.scaleExecutionRisks = {};
     state.scaleExecutionGateReviews = {};
+    state.scaleGateReviewSummaries = {};
+    state.scaleRecoveryPlans = {};
+    state.scaleOwnerCommitments = {};
+    state.scaleSecondWaveLaunch = { hospitals:{}, reps:{}, startedAt:null };
     saveState();
     render();
     showToast("Scale Execution Plan 已按当前决策重新生成");
@@ -3134,6 +3146,174 @@
     return '<section class="scale-second-wave ' + (unlocked ? "unlocked" : "locked") + '"><div class="second-wave-head"><div><span>SECOND WAVE</span><h2>' + (unlocked ? "第二批扩展已解锁" : "第二批扩展尚未解锁") + '</h2><p>' + (unlocked ? "Day 30 Gate 已通过, 可以开始准备第二批医院与代表." : "只有 Day 30 Gate 通过 / 有条件通过后才允许扩到第二批.") + '</p></div><b>' + (unlocked ? "UNLOCKED" : "LOCKED") + '</b></div><div class="second-wave-grid"><div><span>候选医院</span><div class="second-wave-items">' + (hospitals || '<div class="brief-muted">当前计划已包含所有候选医院.</div>') + '</div></div><div><span>候选代表</span><div class="second-wave-items">' + (reps || '<div class="brief-muted">当前计划已包含所有候选代表.</div>') + '</div></div></div></section>';
   }
 
+  function scaleGateSummary(gateId) {
+    var plan = state.scaleExecutionPlan;
+    var review = state.scaleExecutionGateReviews[gateId];
+    if (!plan || !review) return null;
+    var phaseId = gatePhaseId(gateId);
+    var phase = plan.phases.find(function(p){ return p.id === phaseId; }) || plan.phases[0];
+    var progress = scalePlanPhaseProgress(plan,phaseId);
+    var risks = scaleExecutionRiskRegister(plan).filter(function(r){ return r.phase === phase.label; });
+    var owners = scaleOwnerProgress(plan).filter(function(o){
+      return phase.tasks.some(function(t){ return t.owner === o.owner; });
+    });
+    var slowOwner = owners.slice().sort(function(a,b){ return a.pct-b.pct; })[0];
+    var completed = phase.tasks.filter(function(t){ return !!state.scaleExecutionChecks[t.id]; });
+    var pending = phase.tasks.filter(function(t){ return !state.scaleExecutionChecks[t.id]; });
+
+    var headline = review.status === "pass"
+      ? phase.title + " 已完成, 可以进入下一阶段."
+      : (review.status === "conditional"
+        ? phase.title + " 有条件通过, 必须带着恢复计划继续."
+        : phase.title + " 暂缓, 当前阻塞未解除.");
+
+    return {
+      gateId:gateId,
+      day:review.day,
+      label:review.label,
+      headline:headline,
+      progress:progress.pct,
+      completed:completed.length,
+      total:phase.tasks.length,
+      risks:risks.length,
+      slowOwner:slowOwner ? slowOwner.owner : "-",
+      completedTitles:completed.slice(0,3).map(function(t){return t.title;}),
+      pendingTitles:pending.slice(0,3).map(function(t){return t.title;}),
+      keyRisk:risks[0] ? risks[0].reason : "当前阶段没有未关闭高优先风险.",
+      next:review.status === "pass"
+        ? (gateId === "g30" ? "启动第二批医院 / 代表准备, 进入 Day 31–60 Value 验证." : (gateId === "g60" ? "进入跨场景复制与 Learning Engine 验证." : "形成下一轮区域 Scale Decision."))
+        : "先完成恢复计划与 Owner 承诺, 在下一次 Review 重新判断."
+    };
+  }
+
+  function generateGateReviewSummary(gateId) {
+    var summary = scaleGateSummary(gateId);
+    if (!summary) {
+      showToast("请先完成该 Gate Review");
+      return;
+    }
+    state.scaleGateReviewSummaries[gateId] = Object.assign({ generatedAt:new Date().toISOString() },summary);
+    saveState();
+    render();
+    showToast(summary.gateId.toUpperCase() + " 会议摘要已生成");
+  }
+
+  function createRecoveryPlan(gateId) {
+    var review = state.scaleExecutionGateReviews[gateId];
+    if (!review) {
+      showToast("请先完成该 Gate Review");
+      return;
+    }
+    if (review.status === "pass") {
+      showToast("该 Gate 已通过, 无需恢复计划");
+      return;
+    }
+    var plan = state.scaleExecutionPlan;
+    var phaseId = gatePhaseId(gateId);
+    var phase = plan.phases.find(function(p){return p.id===phaseId;}) || plan.phases[0];
+    var openTasks = phase.tasks.filter(function(t){ return !state.scaleExecutionChecks[t.id]; });
+    var risks = scaleExecutionRiskRegister(plan).filter(function(r){return r.phase===phase.label;});
+    var recovery = openTasks.slice(0,4).map(function(task,i){
+      var risk = risks.find(function(r){return r.id===task.id;});
+      return {
+        id:gateId + "-recovery-" + (i+1),
+        taskId:task.id,
+        owner:task.owner,
+        title:task.title,
+        reason:risk ? risk.reason : "Gate Review 时该任务尚未完成.",
+        action:"在下一个 7 天窗口内完成 “" + task.title + "”, 并提交可检查 Success Evidence.",
+        dueDay:Math.min(90,Number(state.scaleExecutionDay || 1)+7),
+        committed:false
+      };
+    });
+    state.scaleRecoveryPlans[gateId] = recovery;
+    saveState();
+    render();
+    showToast(gateId.toUpperCase() + " 恢复计划已生成");
+  }
+
+  function toggleRecoveryCommitment(gateId,recoveryId) {
+    var list = state.scaleRecoveryPlans[gateId] || [];
+    var item = list.find(function(x){return x.id===recoveryId;});
+    if (!item) return;
+    item.committed = !item.committed;
+    state.scaleOwnerCommitments[recoveryId] = item.committed ? {
+      owner:item.owner,
+      at:new Date().toISOString(),
+      dueDay:item.dueDay
+    } : null;
+    saveState();
+    render();
+  }
+
+  function secondWaveLaunchStats(plan) {
+    var wave = scaleSecondWave(plan);
+    var h = state.scaleSecondWaveLaunch && state.scaleSecondWaveLaunch.hospitals || {};
+    var r = state.scaleSecondWaveLaunch && state.scaleSecondWaveLaunch.reps || {};
+    var hospitalStarted = wave.hospitals.filter(function(x){return !!h[x.id];}).length;
+    var repStarted = wave.reps.filter(function(x){return !!r[x.id];}).length;
+    return {
+      hospitals:hospitalStarted,
+      hospitalTotal:wave.hospitals.length,
+      reps:repStarted,
+      repTotal:wave.reps.length,
+      started:hospitalStarted+repStarted,
+      total:wave.hospitals.length+wave.reps.length
+    };
+  }
+
+  function toggleSecondWaveLaunch(type,id) {
+    if (!secondWaveUnlocked()) {
+      showToast("Day 30 Gate 尚未解锁第二批");
+      return;
+    }
+    if (!state.scaleSecondWaveLaunch) state.scaleSecondWaveLaunch = {hospitals:{},reps:{},startedAt:null};
+    var bucket = type === "hospital" ? state.scaleSecondWaveLaunch.hospitals : state.scaleSecondWaveLaunch.reps;
+    bucket[id] = !bucket[id];
+    if (!state.scaleSecondWaveLaunch.startedAt && Object.keys(bucket).some(function(k){return !!bucket[k];})) {
+      state.scaleSecondWaveLaunch.startedAt = new Date().toISOString();
+    }
+    saveState();
+    render();
+  }
+
+  function renderGateReviewOperations(plan) {
+    var cards = (plan.gates || []).map(function(g){
+      var review = state.scaleExecutionGateReviews[g.id];
+      var summary = state.scaleGateReviewSummaries[g.id];
+      var recovery = state.scaleRecoveryPlans[g.id] || [];
+      var committed = recovery.filter(function(x){return x.committed;}).length;
+      return '<article class="gate-ops-card ' + (review ? "reviewed" : "") + '"><div class="gate-ops-head"><div><span>' + esc(g.day) + '</span><strong>' + esc(g.title) + '</strong></div><b>' + (review ? esc(review.label) : "待 Review") + '</b></div>' +
+        (review ? '<div class="gate-ops-actions"><button data-gate-summary="' + g.id + '">' + (summary ? "重新生成摘要" : "生成会议摘要") + '</button><button data-recovery-plan="' + g.id + '" ' + (review.status === "pass" ? "disabled" : "") + '>' + (recovery.length ? "刷新恢复计划" : "生成恢复计划") + '</button></div>' : '<p class="gate-ops-empty">到达 Gate 窗口并完成管理 Review 后, 才生成会议摘要与恢复计划.</p>') +
+        (summary ? '<div class="gate-summary"><span>MEETING SUMMARY</span><strong>' + esc(summary.headline) + '</strong><p>' + esc(summary.keyRisk) + '</p><small>最慢 Owner · ' + esc(summary.slowOwner) + ' · Next · ' + esc(summary.next) + '</small></div>' : '') +
+        (recovery.length ? '<div class="recovery-list">' + recovery.map(function(item){
+          return '<button class="recovery-item ' + (item.committed ? "committed" : "") + '" data-recovery-commit="' + item.id + '" data-recovery-gate="' + g.id + '"><span>' + (item.committed ? "✓" : "") + '</span><div><strong>' + esc(item.owner) + ' · ' + esc(item.title) + '</strong><p>' + esc(item.action) + '</p><small>Due · Day ' + item.dueDay + '</small></div></button>';
+        }).join("") + '<div class="recovery-foot"><span>Owner 承诺</span><strong>' + committed + '/' + recovery.length + '</strong></div></div>' : '') +
+      '</article>';
+    }).join("");
+    return '<section class="scale-operations-section"><div class="scale-plan-section-title"><span>07</span><div><h2>Gate Review 会议与恢复计划</h2><p>Review 不是状态标签, 而是会议结论、恢复动作和 Owner 承诺.</p></div></div><div class="gate-ops-grid">' + cards + '</div></section>';
+  }
+
+  function renderScaleOperationsCockpit(plan) {
+    var overall = overallScalePlanProgress(plan);
+    var variance = scalePlanVariance(plan);
+    var risks = scaleExecutionRiskRegister(plan);
+    var g30 = state.scaleExecutionGateReviews.g30;
+    var g60 = state.scaleExecutionGateReviews.g60;
+    var g90 = state.scaleExecutionGateReviews.g90;
+    var wave = secondWaveLaunchStats(plan);
+    var recoveryTotal = Object.keys(state.scaleRecoveryPlans || {}).reduce(function(sum,key){return sum+(state.scaleRecoveryPlans[key]||[]).length;},0);
+    var recoveryCommitted = Object.keys(state.scaleRecoveryPlans || {}).reduce(function(sum,key){return sum+(state.scaleRecoveryPlans[key]||[]).filter(function(x){return x.committed;}).length;},0);
+
+    var stage = g90 ? "Day 90 Scale Review" : (g60 ? "61–90 天复制验证" : (g30 ? "31–60 天价值验证" : "0–30 天 Launch"));
+    var nextGate = !g30 ? "Day 30 Launch Gate" : (!g60 ? "Day 60 Value Gate" : (!g90 ? "Day 90 Scale Review" : "下一轮 Scale Decision"));
+
+    return '<section class="scale-ops-cockpit"><div class="scale-ops-head"><div><span>SCALE OPERATIONS COCKPIT</span><h2>' + esc(plan.target) + ' · ' + esc(stage) + '</h2><p>把计划、风险、Gate、Owner 承诺和第二批启动收在一个运营视图里.</p></div><div><span>NEXT GATE</span><strong>' + esc(nextGate) + '</strong></div></div>' +
+      '<div class="scale-ops-metrics"><div><span>总执行</span><strong>' + overall.pct + '%</strong><small>' + overall.done + '/' + overall.total + '</small></div><div><span>计划偏差</span><strong>' + (variance.delta>0?"+":"") + variance.delta + '%</strong><small>' + (variance.status==="behind"?"落后计划":(variance.status==="ahead"?"领先计划":"基本按计划")) + '</small></div><div><span>风险 / 延期</span><strong>' + risks.length + '</strong><small>需要恢复动作</small></div><div><span>恢复承诺</span><strong>' + recoveryCommitted + '/' + recoveryTotal + '</strong><small>Owner 已确认</small></div><div><span>第二批启动</span><strong>' + wave.started + '/' + wave.total + '</strong><small>医院 + 代表</small></div></div>' +
+      '<div class="scale-ops-flow"><div class="' + (g30?"done":"active") + '"><span>01</span><strong>Launch</strong><small>' + (g30?esc(g30.label):"进行中") + '</small></div><em>→</em><div class="' + (g60?"done":(g30?"active":"")) + '"><span>02</span><strong>Value</strong><small>' + (g60?esc(g60.label):(g30?"进行中":"待解锁")) + '</small></div><em>→</em><div class="' + (g90?"done":(g60?"active":"")) + '"><span>03</span><strong>Repeatability</strong><small>' + (g90?esc(g90.label):(g60?"进行中":"待解锁")) + '</small></div></div>' +
+    '</section>';
+  }
+
   function renderScaleExecutionPlan() {
     var plan = state.scaleExecutionPlan;
     if (!plan) {
@@ -3218,6 +3398,10 @@
       state.scaleExecutionChecks = {};
       state.scaleExecutionRisks = {};
       state.scaleExecutionGateReviews = {};
+      state.scaleGateReviewSummaries = {};
+      state.scaleRecoveryPlans = {};
+      state.scaleOwnerCommitments = {};
+      state.scaleSecondWaveLaunch = { hospitals:{}, reps:{}, startedAt:null };
       state.scaleExecutionDay = 18;
     } else {
       state.scaleExecutionPlan = createScaleExecutionPlan(snapshot);
@@ -3226,6 +3410,10 @@
       state.scaleExecutionDay = 18;
       state.scaleExecutionRisks = {};
       state.scaleExecutionGateReviews = {};
+      state.scaleGateReviewSummaries = {};
+      state.scaleRecoveryPlans = {};
+      state.scaleOwnerCommitments = {};
+      state.scaleSecondWaveLaunch = { hospitals:{}, reps:{}, startedAt:null };
     }
     saveState();
     render();
