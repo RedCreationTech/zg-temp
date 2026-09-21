@@ -219,8 +219,27 @@
   function clearManagementDecision(riskId) {
     if (!state.managementDecisions[riskId]) return;
     delete state.managementDecisions[riskId];
+
+    if (riskId === "m1") {
+      state.actionStatus.a1 = "todo";
+      state.actionStatus.a2 = "doing";
+      state.actionStatus.a3 = "todo";
+      delete state.resourceOverrides["h1:r-h1-1"];
+    }
+    if (riskId === "m2") {
+      state.actionStatus.a7 = "todo";
+    }
+    if (riskId === "m3") {
+      state.actionStatus.a5 = "todo";
+      delete state.resourceOverrides["h3:r-h3-3"];
+    }
+    if (riskId === "m4") {
+      state.actionStatus.a4 = "doing";
+      delete state.resourceOverrides["h2:r-h2-1"];
+    }
+
     saveState();
-    showToast("已撤销该管理决策");
+    showToast("已撤销该管理决策及其演示联动");
     render();
   }
 
@@ -1520,19 +1539,19 @@
       el.addEventListener("click", function () { openCustom(el.getAttribute("data-custom-action")); });
     });
 
-    $("[data-management-decision]").forEach(function (el) {
+    $$("[data-management-decision]").forEach(function (el) {
       el.addEventListener("click", function () {
         applyManagementDecision(el.getAttribute("data-management-risk"), el.getAttribute("data-management-decision"));
       });
     });
 
-    $("[data-management-clear]").forEach(function (el) {
+    $$("[data-management-clear]").forEach(function (el) {
       el.addEventListener("click", function () {
         clearManagementDecision(el.getAttribute("data-management-clear"));
       });
     });
 
-    $("[data-pilot-week]").forEach(function (el) {
+    $$("[data-pilot-week]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.pilotWeek = Number(el.getAttribute("data-pilot-week"));
         saveState();
@@ -1541,7 +1560,7 @@
       });
     });
 
-    $("[data-pilot-next]").forEach(function (el) {
+    $$("[data-pilot-next]").forEach(function (el) {
       el.addEventListener("click", function () {
         if (state.pilotWeek < 8) state.pilotWeek += 1;
         saveState();
@@ -1550,7 +1569,7 @@
       });
     });
 
-    $("[data-pilot-prev]").forEach(function (el) {
+    $$("[data-pilot-prev]").forEach(function (el) {
       el.addEventListener("click", function () {
         if (state.pilotWeek > 1) state.pilotWeek -= 1;
         saveState();
@@ -1559,7 +1578,7 @@
       });
     });
 
-    $("[data-risk]").forEach(function (el) {
+    $$("[data-risk]").forEach(function (el) {
       el.addEventListener("click", function () {
         openCustom("risk", el.getAttribute("data-risk"));
       });
