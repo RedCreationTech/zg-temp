@@ -1077,6 +1077,258 @@
     );
   }
 
+  function reviewActionGroup(hospitalId) {
+    var ids = hospitalId === "h1" ? ["a1","a2","a3","a7"] : (hospitalId === "h2" ? ["a4","a6"] : ["a5"]);
+    return (data.actions || []).filter(function(a){ return ids.indexOf(a.id) >= 0; });
+  }
+
+  function reviewActionProgress(hospitalId) {
+    var actions = reviewActionGroup(hospitalId);
+    var done = actions.filter(function(a){ return getActionStatus(a) === "done"; }).length;
+    var doing = actions.filter(function(a){ return getActionStatus(a) === "doing"; }).length;
+    var risk = actions.filter(function(a){ return getActionStatus(a) === "risk"; }).length;
+    var pct = actions.length ? Math.round((done + doing * .55) / actions.length * 100) : 0;
+    return { total:actions.length,done:done,doing:doing,risk:risk,pct:pct };
+  }
+
+  function reviewHospitalOutcome(hospital) {
+    if (hospital.id === "h1") {
+      var rv2 = state.liveVisitSessions.rv2;
+      var rv1 = state.liveVisitSessions.rv1;
+      if (rv2 && rv2.ended && rv2.commitment) return rv2.commitment;
+      if (rv1 && rv1.ended && rv1.commitment) return rv1.commitment;
+      return "周敏 MDT 承诺仍在推进, 刘晨结束阶段需继续辅导";
+    }
+    if (hospital.id === "h2") {
+      var rv3 = state.liveVisitSessions.rv3;
+      if (rv3 && rv3.ended && rv3.commitment) return rv3.commitment;
+      return "病例共识会已有口头意向, 仍需锁定日期与名单";
+    }
+    return state.managementDecisions.m3 === "stop"
+      ? "已停止高成本活动投入, 本周优先补齐关键影响者地图"
+      : "决策链完整度不足, 暂无高确定性业务 Outcome";
+  }
+
+  function reviewHospitalStatus(hospital) {
+    var p = reviewActionProgress(hospital.id);
+    if (p.risk > 0) return { label:"需纠偏", cls:"risk" };
+    if (p.pct >= 75) return { label:"推进良好", cls:"done" };
+    if (p.doing > 0) return { label:"执行中", cls:"doing" };
+    return { label:"待推进", cls:"todo" };
+  }
+
+  function managerReviewChainStatus() {
+    var hospitalPct = Math.round((reviewActionProgress("h1").pct + reviewActionProgress("h2").pct + reviewActionProgress("h3").pct) / 3);
+    var actionDone = (data.actions || []).filter(function(a){ return getActionStatus(a) === "done"; }).length;
+    var actionActive = (data.actions || []).filter(function(a){ return getActionStatus(a) === "doing"; }).length;
+    var agenda = teamAgendaCandidates();
+    var coachingDone = agenda.filter(function(rep){ return !!state.coachingAgendaStatus[rep.id]; }).length;
+    var outcomeSignals = Object.keys(state.liveVisitSessions || {}).filter(function(id){
+      return state.liveVisitSessions[id] && state.liveVisitSessions[id].ended;
+    }).length + (state.outcomes || []).length;
+    var playbookDone = !!state.teamPlaybook;
+    return {
+      hospital: hospitalPct,
+      action: Math.min(100,Math.round((actionDone + actionActive * .55) / Math.max(1,(data.actions||[]).length) * 100)),
+      coaching: Math.round(coachingDone / Math.max(1,agenda.length) * 100),
+      outcome: Math.min(100,outcomeSignals * 25),
+      learning: playbookDone ? 100 : 40,
+      next: state.managerReviewGenerated ? 100 : 0
+    };
+  }
+
+  function managerReviewPlanItems() {
+    var agendaNext = rankedTeamReps().filter(function(rep){
+      return !state.coachingAgendaStatus[rep.id];
+    })[0];
+    return [
+      {
+        id:"nw1",
+        owner:"张蕾",
+        route:"doctor",
+        title:"锁定周敏周三 MDT 病例讨论",
+        reason:"华东附一 Top 1 杠杆仍然是方案选择阶段的场景化证据",
+        success:"周二前确认 1 例患者与讨论材料"
+      },
+      {
+        id:"nw2",
+        owner: agendaNext ? agendaNext.name : "李明",
+        route:"teamcoaching",
+        title: agendaNext ? "完成 " + agendaNext.name + " 的 Top 1 行为辅导" : "生成下一轮团队辅导 Agenda",
+        reason: agendaNext ? agendaNext.issue + " 仍是当前团队高优先改进行为" : "本周核心辅导已完成",
+        success:"完成 15 分钟 Coaching + 经理检查证据"
+      },
+      {
+        id:"nw3",
+        owner:"赵倩",
+        route:"hospital",
+        title:"把滨江病例共识会从口头意向变成日历事件",
+        reason:"方向已经获得认可, 下一步必须锁定日期、参与人和 3 个病例",
+        success:"日期 + 参与医生 + 3 个病例全部确认"
+      },
+      {
+        id:"nw4",
+        owner:"李明",
+        route:"hospital",
+        title:"海川继续只买信息, 不扩大活动预算",
+        reason:"决策链仍是最大未知, 高成本活动不具备确定性",
+        success:"关键影响者地图完整度达到 90%"
+      },
+      {
+        id:"nw5",
+        owner:"销售卓越",
+        route:"learning",
+        title: state.teamPlaybook ? "验证本周 Champion Pattern" : "从高质量拜访中选 1 个 Champion Pattern",
+        reason: state.teamPlaybook ? "团队打法已被经理采纳, 需要跨 2–3 个同类场景验证" : "组织学习需要从真实 Outcome 而不是培训材料开始",
+        success: state.teamPlaybook ? "至少 2 个同类场景出现正向 Outcome" : "形成 1 个可测试的团队打法候选"
+      }
+    ];
+  }
+
+  function generateManagerReviewPlan() {
+    state.managerReviewGenerated = true;
+    var plan = managerReviewPlanItems();
+    plan.forEach(function(item){
+      if (state.managerReviewPlan[item.id] == null) state.managerReviewPlan[item.id] = true;
+    });
+    saveState();
+    render();
+    showToast("下周行动计划已根据本周 Context 生成");
+  }
+
+  function toggleManagerReviewPlan(id) {
+    if (!state.managerReviewGenerated) return;
+    state.managerReviewPlan[id] = !state.managerReviewPlan[id];
+    saveState();
+    render();
+  }
+
+  function closeManagerReview() {
+    if (!state.managerReviewGenerated) {
+      showToast("请先生成并确认下周计划");
+      return;
+    }
+    var selected = Object.keys(state.managerReviewPlan || {}).filter(function(id){ return !!state.managerReviewPlan[id]; }).length;
+    if (selected < 3) {
+      showToast("至少确认 3 个下周行动后才能结束 Review");
+      return;
+    }
+    state.managerReviewClosed = !state.managerReviewClosed;
+    saveState();
+    render();
+    showToast(state.managerReviewClosed ? "本周 Review 已完成并锁定下周重点" : "已重新打开本周 Review");
+  }
+
+  function renderManagerReviewHospitalTable() {
+    return (data.hospitals || []).map(function(h){
+      var progress = reviewActionProgress(h.id);
+      var status = reviewHospitalStatus(h);
+      var lever = h.levers && h.levers[0];
+      return '<tr><td><b>' + esc(h.name.replace("华东大学附属第一医院","华东附一")) + '</b><span>' + esc(h.tier) + '</span></td>' +
+        '<td><strong>' + esc(h.target) + '</strong></td>' +
+        '<td><div class="review-progress"><div class="bar"><i style="width:' + progress.pct + '%"></i></div><b>' + progress.pct + '%</b></div><small>' + progress.done + ' 完成 · ' + progress.doing + ' 执行中</small></td>' +
+        '<td><span class="status ' + status.cls + '">' + status.label + '</span></td>' +
+        '<td><p>' + esc(reviewHospitalOutcome(h)) + '</p></td>' +
+        '<td><button class="tiny-btn" data-review-route="hospital" data-review-hospital="' + h.id + '">查看</button></td></tr>';
+    }).join("");
+  }
+
+  function renderManagerReviewChain() {
+    var s = managerReviewChainStatus();
+    var steps = [
+      ["医院目标",s.hospital,"hospital"],
+      ["代表 Action",s.action,"dashboard"],
+      ["Coaching",s.coaching,"teamcoaching"],
+      ["Outcome",s.outcome,"coaching"],
+      ["Champion",s.learning,"learning"],
+      ["下周计划",s.next,"managerreview"]
+    ];
+    return '<div class="weekly-review-chain">' + steps.map(function(step,i){
+      var cls = step[1] >= 90 ? "done" : (step[1] > 0 ? "active" : "");
+      return '<button class="weekly-review-step ' + cls + '" data-review-route="' + step[2] + '"><span>0' + (i+1) + '</span><strong>' + esc(step[0]) + '</strong><div class="bar"><i style="width:' + step[1] + '%"></i></div><b>' + step[1] + '%</b></button>';
+    }).join('<div class="weekly-review-arrow">→</div>') + '</div>';
+  }
+
+  function renderManagerReviewCoaching() {
+    var agenda = teamAgendaCandidates();
+    var cards = agenda.map(function(rep){
+      var rt = rep.runtime || teamRepRuntime(rep);
+      var done = !!state.coachingAgendaStatus[rep.id];
+      var visit = data.visits.find(function(v){ return v.id === rep.visitId; }) || data.visits[0];
+      return '<div class="review-coach-card ' + (done ? "done" : "") + '"><div><span>' + (done ? "✓ 已辅导" : "本周 Agenda") + '</span><strong>' + esc(rep.name) + ' · ' + esc(rep.issue) + '</strong><p>' + esc(rep.next) + '</p></div><div><b>拜访 ' + rt.score + '</b><b>优先 ' + rt.priority + '</b><button class="tiny-btn" data-review-coach="' + rep.id + '">进入</button></div></div>';
+    }).join("");
+    return cards || '<div class="empty-state"><strong>暂无本周 Coaching Agenda</strong></div>';
+  }
+
+  function renderManagerReviewOutcomes() {
+    var signals = [];
+    Object.keys(state.liveVisitSessions || {}).forEach(function(id){
+      var s = state.liveVisitSessions[id];
+      if (!s || !s.ended || !s.commitment) return;
+      var rv = (data.repDay && data.repDay.visits || []).find(function(v){ return v.id === id; });
+      signals.push({
+        type:"客户承诺",
+        title: rv ? rv.doctor + " · " + rv.hospital.replace("华东大学附属第一医院","华东附一") : id,
+        signal:s.commitment,
+        evidence:s.notes && s.notes.length ? s.notes[s.notes.length-1] : "现场拜访回流"
+      });
+    });
+    (state.outcomes || []).slice(0,3).forEach(function(o){
+      signals.push({type:"Outcome",title:o.targetType + ":" + o.targetId,signal:o.signal,evidence:o.evidence || "AI GPS Outcome"});
+    });
+    if (!signals.length) {
+      signals = [
+        {type:"业务里程碑",title:"滨江中心",signal:"病例共识会获得口头意向",evidence:"赵倩重点拜访"},
+        {type:"行为风险",title:"刘晨",signal:"连续 3 次重点拜访未形成明确下一步",evidence:"Coaching Agent"}
+      ];
+    }
+    return signals.slice(0,5).map(function(s){
+      return '<div class="review-outcome"><span>' + esc(s.type) + '</span><strong>' + esc(s.title) + '</strong><p>' + esc(s.signal) + '</p><small>' + esc(s.evidence) + '</small></div>';
+    }).join("");
+  }
+
+  function renderManagerReviewPlan() {
+    if (!state.managerReviewGenerated) {
+      return '<div class="review-plan-empty"><span>NEXT WEEK</span><strong>还没有生成下周行动计划</strong><p>系统会根据本周医院进展、代表执行、Coaching、Outcome 和团队打法生成建议.</p><button class="btn primary" data-review-generate>生成下周计划</button></div>';
+    }
+    var items = managerReviewPlanItems();
+    return '<div class="review-plan-list">' + items.map(function(item){
+      var checked = state.managerReviewPlan[item.id] !== false;
+      return '<button class="review-plan-item ' + (checked ? "selected" : "") + '" data-review-plan="' + item.id + '"><span class="review-plan-check">' + (checked ? "✓" : "") + '</span><div><strong>' + esc(item.title) + '</strong><p>' + esc(item.reason) + '</p><small>Owner · ' + esc(item.owner) + ' · Success · ' + esc(item.success) + '</small></div><em data-review-route="' + item.route + '">→</em></button>';
+    }).join("") + '</div>';
+  }
+
+  function renderManagerReview() {
+    var chain = managerReviewChainStatus();
+    var avgHospital = Math.round((chain.hospital + chain.action) / 2);
+    var agenda = teamAgendaCandidates();
+    var coachingDone = agenda.filter(function(rep){ return !!state.coachingAgendaStatus[rep.id]; }).length;
+    var planSelected = state.managerReviewGenerated ? Object.keys(state.managerReviewPlan || {}).filter(function(id){ return !!state.managerReviewPlan[id]; }).length : 0;
+    var champion = bestTeamPlaybookCandidate();
+
+    return '<div class="page-banner review-banner"><div><span class="banner-kicker">WEEKLY MANAGER REVIEW</span><h2>本周发生了什么, 下周只做什么?</h2><p>把医院目标、代表行动、辅导、Outcome 和组织学习收敛成一次可执行的周会.</p></div><div class="banner-side"><strong>' + (state.managerReviewClosed ? "CLOSED" : "W4") + '</strong><span>' + (state.managerReviewClosed ? "本周 Review 已完成" : "当前 Review 周") + '</span></div></div>' +
+      '<div class="metric-grid">' +
+        metric("医院推进健康度",avgHospital+"%","目标与 Action 综合进展",avgHospital>=70?"良好":"关注","院") +
+        metric("本周核心 Coaching",coachingDone+"/2","30 分钟 Agenda",coachingDone===2?"完成":"待完成","辅") +
+        metric("真实 Outcome",String(chain.outcome)+"%","现场承诺与结果信号","回流","O") +
+        metric("下周重点",state.managerReviewGenerated?planSelected+" 项":"未生成","确认后关闭周会",state.managerReviewClosed?"已锁定":"","周") +
+      '</div>' +
+      '<div class="mt-16">' + panel("本周经营链","从医院目标一直看到下周行动, 每个节点都能钻回原页面",renderManagerReviewChain()) + '</div>' +
+      '<div class="mt-16">' + panel("01 · 医院目标与 Action Review","不是汇报拜访次数, 而是检查关键医院业务杠杆有没有真正推进",'<div class="review-table-wrap"><table class="review-hospital-table"><thead><tr><th>医院</th><th>本季度目标</th><th>Action 进展</th><th>状态</th><th>本周 Outcome / 风险</th><th></th></tr></thead><tbody>' + renderManagerReviewHospitalTable() + '</tbody></table></div>') + '</div>' +
+      '<div class="grid-equal mt-16"><div>' +
+        panel("02 · 本周核心 Coaching","30 分钟 Agenda 只保留最值得经理介入的 2 人",'<div class="review-coaching-list">' + renderManagerReviewCoaching() + '</div><div class="review-link"><button class="btn soft" data-review-route="teamcoaching">打开团队辅导工作台</button></div>') +
+      '</div><div>' +
+        panel("03 · Outcome 信号","不问“做完了吗”, 而问客户行为和业务里程碑发生了什么",'<div class="review-outcomes">' + renderManagerReviewOutcomes() + '</div>') +
+      '</div></div>' +
+      '<div class="grid-equal mt-16"><div>' +
+        panel("04 · Champion Pattern","把有效打法从个人经验变成下周可以复制的团队动作",
+          champion ? '<div class="review-champion"><span>CHAMPION</span><strong>' + esc(champion.name) + ' · ' + esc(champion.strength) + '</strong><p>' + esc(champion.next) + '</p><div><b>承诺率 ' + esc(champion.commitmentRate) + '%</b><b>NBA ' + esc(champion.nbaCompletion) + '%</b></div><button class="btn ' + (state.teamPlaybook?"soft":"primary") + '" data-review-adopt-playbook>' + (state.teamPlaybook?"✓ 已进入团队 Playbook":"采纳为团队 Playbook") + '</button></div>' : '<div class="empty-state">暂无 Champion Pattern</div>') +
+      '</div><div>' +
+        panel("05 · 下周只做这些","AI 根据本周 Context 生成, 经理勾选确认而不是照单全收",renderManagerReviewPlan()) +
+      '</div></div>' +
+      '<div class="review-close-bar"><div><span>REVIEW GATE</span><strong>' + (state.managerReviewClosed ? "本周已关闭, 下周重点已锁定" : "确认下周重点后结束本周 Review") + '</strong><p>' + (state.managerReviewGenerated ? "当前已确认 " + planSelected + " 项下周行动." : "尚未生成下周行动计划.") + '</p></div><button class="btn primary" data-review-close>' + (state.managerReviewClosed ? "重新打开 Review" : "完成本周 Review") + '</button></div>';
+  }
+
   function renderTeamCoaching() {
     var allReps = (data.teamCoaching && data.teamCoaching.reps || []).map(function(rep){
       return Object.assign({},rep,{runtime:teamRepRuntime(rep)});
@@ -2286,6 +2538,7 @@
     if (state.route === "rep") view = renderRep();
     else if (state.route === "visitlive") view = renderVisitLive();
     else if (state.route === "teamcoaching") view = renderTeamCoaching();
+    else if (state.route === "managerreview") view = renderManagerReview();
     else if (state.route === "hospital") view = renderHospital();
     else if (state.route === "doctor") view = renderDoctor();
     else if (state.route === "coaching") view = renderCoaching();
@@ -2570,7 +2823,54 @@
       });
     });
 
-    $$("[data-reset-agenda]").forEach(function (el) {
+    $("[data-review-route]").forEach(function (el) {
+      el.addEventListener("click", function (event) {
+        event.stopPropagation();
+        var route = el.getAttribute("data-review-route");
+        var hospitalId = el.getAttribute("data-review-hospital");
+        if (hospitalId) state.selectedHospital = hospitalId;
+        navigate(route);
+      });
+    });
+
+    $("[data-review-coach]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        openTeamRepCoaching(el.getAttribute("data-review-coach"), false);
+      });
+    });
+
+    $("[data-review-generate]").forEach(function (el) {
+      el.addEventListener("click", generateManagerReviewPlan);
+    });
+
+    $("[data-review-plan]").forEach(function (el) {
+      el.addEventListener("click", function (event) {
+        if (event.target && event.target.hasAttribute("data-review-route")) return;
+        toggleManagerReviewPlan(el.getAttribute("data-review-plan"));
+      });
+    });
+
+    $("[data-review-adopt-playbook]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var best = bestTeamPlaybookCandidate();
+        if (!best) return;
+        if (state.teamPlaybook && state.teamPlaybook.repId === best.id) {
+          state.teamPlaybook = null;
+          showToast("已取消团队 Playbook");
+        } else {
+          state.teamPlaybook = { repId:best.id, name:best.name, issue:best.issue, adoptedAt:new Date().toISOString() };
+          showToast(best.name + " 的打法已进入团队 Playbook");
+        }
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-review-close]").forEach(function (el) {
+      el.addEventListener("click", closeManagerReview);
+    });
+
+    $("[data-reset-agenda]").forEach(function (el) {
       el.addEventListener("click", resetCoachingAgenda);
     });
 
