@@ -177,6 +177,95 @@ Doctor Agent 增加拜访前准备工作台：
 → 下一次辅导 NBA
 ```
 
+## 本轮管理驾驶舱增强
+
+销售总监页面现在不再只是看风险列表，而是可以直接做 5 类管理动作：
+
+```text
+加资源
+保持
+纠偏
+升级
+停止
+```
+
+每个需要介入的事项会展示：
+
+- 业务对象
+- 风险等级
+- 为什么需要管理层介入
+- AI 推荐管理动作
+- Owner
+- 五种可选管理动作
+- 当前已决策状态
+- 撤销 / 重新选择
+
+管理动作会继续影响其他页面：
+
+```text
+Director Decision
+    ↓
+Hospital / Doctor / Coaching
+    ↓
+Action 状态
+    ↓
+Pilot Metrics
+```
+
+例如：
+
+```text
+华东附一
+→ 总监选择“加资源”
+→ Hospital Agent 显示销售总监决策
+→ 医学支持资源进入执行
+→ 关键 NBA 状态改变
+→ Pilot 的 NBA 采纳率 / Action 完成率 / Review 覆盖率改变
+```
+
+海川人民医院可以演示：
+
+```text
+总监选择“停止”
+→ 大型活动保持暂缓
+→ 地区经理优先补齐关键影响者地图
+→ 决策进入 Pilot 经营复盘
+```
+
+## 动态 Pilot Operations
+
+Pilot Operations 的核心指标已经改为随当前前端状态动态计算，包括：
+
+- 管理事项已决策数量
+- NBA 采纳率
+- Action 完成率
+- Review 覆盖率
+- Outcome 转化率
+- Rule 有效复用
+- Market Proof
+- Product Proof
+- Scale Readiness
+- W1-W8 周次模拟
+- 本周经营决策回流
+
+同时支持 W1-W8 周次模拟。
+
+可以点击：
+
+- 任意周次
+- 上一周
+- 推进到下一周
+
+总监驾驶舱产生的经营决策会自动进入 Pilot 页的“本周经营决策回流”，形成：
+
+```text
+总监做决定
+→ 一线动作改变
+→ Pilot 指标改变
+→ 周度 Review
+→ 是否扩展
+```
+
 ### 5. Director Decision Cockpit
 
 围绕管理层的五个问题：
@@ -194,7 +283,10 @@ Doctor Agent 增加拜访前准备工作台：
 - 策略偏离
 - 经理辅导
 - 管理层介入事项
+- 加资源 / 保持 / 纠偏 / 升级 / 停止
 - 资源配置建议
+- 管理决策历史
+- 决策反向联动 Hospital / Doctor / Coaching
 - Action → Outcome
 
 ### 6. Pilot Operations
