@@ -1043,6 +1043,225 @@ National Rollout Control Tower
 
 以上仍然全部为浏览器端演示状态, 不连接真实生产系统.
 
+## 本轮 Control Tower Batch 4: Recovery Command / National Situation Map
+
+Control Tower 继续从 Root Cause 分析推进到总部级恢复指挥。
+
+### National Situation Map
+
+新增全国 Rollout 态势地图。
+
+当前地图只展示原型里已经存在的四个区域：
+
+- 华东一区
+- 华东二区
+- 华中一区
+- 华南核心城市
+
+这是经营态势示意图，不是 GIS 系统。
+
+每个区域标记直接读取：
+
+```text
+Stage
+Wave
+Execution
+Value
+Repeatability
+P1 / P2 Exception
+Recovery Command
+SLA Overdue
+```
+
+区域状态分为：
+
+```text
+Stable
+Watch
+Critical
+Candidate
+```
+
+点击区域后可以继续进入现有 Drill-down Explorer。
+
+### Recovery Priority
+
+新增跨区域恢复优先级。
+
+优先级综合：
+
+```text
+Exception Severity
++
+Exception Source
++
+影响区域数
++
+SLA Overdue
+```
+
+这个分数只用于恢复编排，不代表区域业务价值，也不替代 Scale Gate。
+
+每条优先级记录可以直接：
+
+```text
+查看 Root Cause
+生成 Recovery Command
+进入已有 Recovery Command
+```
+
+### Recovery Command
+
+Root Cause Workbench 现在可以把异常转成正式 Recovery Command。
+
+Command 会固化：
+
+- Alert
+- Severity
+- Owner
+- Created At
+- SLA
+- Due At
+- 影响区域
+- Recovery Steps
+- 每一步 Owner
+- 每一步建议完成时间
+- 创建时 Before Snapshot
+
+演示 SLA 规则：
+
+```text
+P1 → 24h
+P2 → 72h
+P3 → 120h
+```
+
+SLA 只管理 Recovery Command，不修改业务 Gate。
+
+### Owner SLA / Overdue
+
+Control Tower 会实时计算：
+
+```text
+Open
+In Progress
+Overdue
+Recovered
+```
+
+如果 Closing Evidence 尚未达标并超过 Due At：
+
+```text
+Recovery Command
+→ Overdue
+```
+
+Control Tower 第一屏新增：
+
+```text
+Recovery Overdue
+```
+
+用于直接暴露 Owner SLA 超时。
+
+这里没有另外创建一条重复异常，避免同一个底层问题被重复统计。
+
+### Before / After
+
+每条 Recovery Command 创建时都会固化 Before Snapshot，例如：
+
+- P1 数量
+- Open Exception 数量
+- Wave Risk 数量
+- Shared Resource Conflict 数量
+- 当前正式 Scale Risk
+- Closing Evidence 状态
+
+后续页面实时计算 Now Snapshot。
+
+因此可以展示：
+
+```text
+BEFORE
+→
+NOW
+```
+
+例如：
+
+```text
+P1        3 → 1
+Wave Risk 1 → 0
+Resource  2 → 0
+Closing   Open → Recovered
+```
+
+After 不通过人工填写产生，而是读取当前浏览器状态重新计算。
+
+### Recovery Command 与 Root Cause 的关系
+
+完整恢复链现在变为：
+
+```text
+Exception
+↓
+Root Cause Workbench
+↓
+Decision Replay
+↓
+Recovery Sequence
+↓
+Generate Recovery Command
+↓
+Owner / SLA
+↓
+Recovery Priority
+↓
+Before / After
+↓
+Closing Evidence
+↓
+Recovered
+```
+
+即使 Recovery Sequence 被人工全部勾选：
+
+```text
+Command Progress = 100%
+```
+
+只要底层 Closing Evidence 没有满足：
+
+```text
+Command Status ≠ Recovered
+```
+
+### 当前全国 Rollout 指挥结构
+
+```text
+National Rollout Control Tower
+├── National Situation Map
+├── Exception Center
+├── Dependency Map
+├── Recovery Priority
+├── Recovery Command Center
+│   ├── Owner
+│   ├── SLA
+│   ├── Overdue
+│   ├── Steps
+│   └── Before / After
+├── Root Cause Workbench
+├── Decision Replay
+├── Recovery Sequence
+├── Closing Evidence
+├── What-if Simulator
+├── Drill-down Explorer
+├── Decision Impact Trace
+└── HQ Decision Log
+```
+
+以上仍然全部运行在浏览器端 Mock / LocalStorage 状态中，不连接真实生产后台。
+
 ## 本轮 Control Tower Batch 3: Root Cause / Decision Replay / Recovery Sequence
 
 National Rollout Control Tower 继续从“看见异常”推进到“解释为什么发生，以及按什么顺序恢复”。
