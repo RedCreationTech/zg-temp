@@ -623,6 +623,128 @@ AI 四轮模拟结果
 
 因此完成陪练后，团队能力画像和辅导优先级会随前端状态变化。
 
+## 本轮 Brief 三视图增强
+
+Weekly Decision Brief 现在支持同一份 Snapshot 的三种阅读方式：
+
+```text
+经理版
+总监版
+Executive
+```
+
+三种视图不会生成三套数据，而是读取同一个周会快照。
+
+### 经理版
+
+保留执行细节：
+
+- 本周变化
+- 三家医院目标与 Action
+- 管理判断
+- Outcome
+- 高优先行为风险
+- Champion Pattern
+- 下周 Owner / Success Signal
+
+适合地区经理执行周会和跟进。
+
+### 总监版
+
+总监版聚焦：
+
+```text
+哪里正在推进
+哪里需要管理介入
+资源是否需要调整
+哪个打法值得扩大验证
+```
+
+新增“区域健康度”：
+
+- Business Momentum
+- Execution Quality
+- Organization Learning
+
+每个维度输出：
+
+```text
+红 / 黄 / 绿
++
+百分比
++
+判断依据
+```
+
+例如：
+
+```text
+Business Momentum
+78%
+绿
+医院关键杠杆推进 + 客户 Outcome
+```
+
+同时新增：
+
+```text
+Territory Comparison
+```
+
+横向比较三家重点医院的：
+
+- Action
+- Outcome
+- 风险
+
+并新增：
+
+```text
+Management Attention
+```
+
+它不是普通风险清单，而是需要管理判断的问题：
+
+```text
+是否需要介入?
+当前是什么情况?
+建议怎么做?
+```
+
+### Executive View
+
+Executive 版进一步压缩为一屏摘要。
+
+结构：
+
+```text
+一句话结论
+↓
+区域健康度
+↓
+Executive Summary
+↓
+Management Attention
+↓
+Champion Pattern
+↓
+下周只做这些
+```
+
+Executive Summary 最多保留 5 条结论，只展示真正会改变管理动作的信息。
+
+### 三视图切换
+
+Brief 顶部提供：
+
+```text
+[经理版] [总监版] [Executive]
+```
+
+切换只改变阅读方式，不改变 Snapshot。
+
+打印 / 保存 PDF 会打印当前选择的视图。
+
 ## 本轮 Weekly Decision Brief 增强
 
 周度 Review 关闭以后，系统会自动生成一张只读的：
