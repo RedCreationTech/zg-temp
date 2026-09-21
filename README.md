@@ -812,6 +812,98 @@ Scale Operations Cockpit
 Day 60 / Day 90 Review
 ```
 
+## 本轮 Scale Value / Repeatability Evidence 增强
+
+Scale Operations 继续从“启动第二批”推进到“证明第二批真的跑起来”。
+
+### 第二批爬坡看板
+
+第二批医院 / 代表启动后，不再直接视为成功。
+
+医院会继续经历：
+
+```text
+已启动
+→ Context Ready
+→ Top Lever 已锁定
+→ 首个 NBA 已执行
+→ 首个 Outcome 已记录
+```
+
+代表会继续经历：
+
+```text
+已启动
+→ 能力基线完成
+→ 首访完成
+→ Coaching 完成
+→ 连续两次达标
+```
+
+Scale Operations Cockpit 会汇总：
+
+- 已启动对象
+- 第二批爬坡完成度
+- 已进入稳定运行的对象数
+
+如果 Day 30 Gate 后续被改为“暂缓”，第二批爬坡会冻结，避免在 Gate 关闭后继续推进。
+
+### Day 60 Value Evidence Room
+
+Day 60 Value Gate 的“通过”不再只检查任务是否全部完成。
+
+必须同时验证 3 类必选业务证据：
+
+```text
+NBA 采纳 ≥70%
+Action 完成 ≥70%
+至少 2 类正向 Outcome
+```
+
+另外保留：
+
+```text
+连续 2 周 Weekly Review
+```
+
+作为支持性证据。
+
+只有必选 Value Evidence 全部验证后，Day 60 才允许直接选择“通过”。
+
+### Day 90 Repeatability Evidence
+
+Day 90 Scale Review 进一步要求 3 类复制证据：
+
+```text
+Champion Pattern 跨 2–3 个同类场景复现
+Decision Rule 候选证据链完整
+管理闭环稳定运行
+```
+
+只有这些证据全部验证，Day 90 才允许直接“通过”。
+
+因此当前扩区闭环已经变为：
+
+```text
+Day 30 Launch Gate
+↓
+Second Wave Launch
+↓
+Second Wave Ramp-up
+↓
+Day 60 Value Evidence
+↓
+Value Gate
+↓
+Day 90 Repeatability Evidence
+↓
+Scale Review
+↓
+下一轮 Scale Decision
+```
+
+以上状态仍全部保存在浏览器中，用脱敏演示数据和前端交互模拟，不连接真实后端。
+
 ## 本轮 Scale Execution 驾驶舱增强
 
 Scale Execution Plan 现在进一步升级为执行驾驶舱，而不是静态 90 天计划。
