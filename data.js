@@ -12,6 +12,26 @@ window.ZG_DATA = {
       stage: "方案选择",
       target: "本季度推动核心科室形成 2 个稳定规范化治疗路径",
       progress: 64,
+      patientFlow: [
+        { stage: "目标患者", volume: 128, rate: 100, status: "stable", note: "核心科室目标患者基础量充足" },
+        { stage: "识别", volume: 102, rate: 80, status: "stable", note: "患者发现不是当前首要瓶颈" },
+        { stage: "方案讨论", volume: 74, rate: 58, status: "risk", note: "高风险患者进入方案讨论时出现明显流失" },
+        { stage: "目标方案", volume: 41, rate: 32, status: "risk", note: "关键医生对目标亚组证据仍有疑问" },
+        { stage: "持续管理", volume: 36, rate: 28, status: "watch", note: "需要后续真实病例与随访证据" }
+      ],
+      stakeholders: [
+        { id: "s-h1-1", name: "周敏", role: "科室决策者", influence: 94, support: 68, relation: "关键突破", action: "周三 MDT 前完成场景化证据沟通" },
+        { id: "s-h1-2", name: "陈浩", role: "治疗组骨干", influence: 82, support: 48, relation: "需要培育", action: "用 3 类边界病例统一患者识别标准" },
+        { id: "s-h1-3", name: "药学部", role: "准入协同", influence: 74, support: 72, relation: "稳定支持", action: "保持准入后规范使用信息同步" },
+        { id: "s-h1-4", name: "医学部", role: "内部资源", influence: 88, support: 90, relation: "资源支持", action: "为 MDT 场景准备已审核真实世界证据" },
+        { id: "s-h1-5", name: "年轻医生组", role: "执行影响者", influence: 64, support: 55, relation: "认知不一", action: "病例卡晨会统一识别要点" }
+      ],
+      resources: [
+        { id: "r-h1-1", type: "医学", item: "MDT 场景证据支持", owner: "医学经理", timing: "周二", lever: "Top 1", status: "ready" },
+        { id: "r-h1-2", type: "代表", item: "周主任场景化拜访", owner: "张蕾", timing: "周三前", lever: "Top 1", status: "doing" },
+        { id: "r-h1-3", type: "市场", item: "3 类病例识别卡", owner: "产品经理", timing: "周四", lever: "Top 2", status: "ready" },
+        { id: "r-h1-4", type: "经理", item: "跨部门 4 周节奏 Review", owner: "李明", timing: "周五", lever: "Top 3", status: "planned" }
+      ],
       levers: [
         { rank: 1, title: "方案选择节点的证据缺口", score: 92, detail: "覆盖频次足够, 但关键医生在患者方案选择节点缺少针对性真实世界证据.", who: "周主任 / 核心治疗组", when: "周三 MDT 前", what: "用真实世界研究证据澄清高风险患者获益", why: "当前主要流失发生在方案选择而非患者发现", success: "周主任同意在下一例符合条件患者中讨论该方案" },
         { rank: 2, title: "年轻医生临床路径认知不一致", score: 81, detail: "治疗组内部对目标患者的识别标准存在差异, 影响患者向规范路径转化.", who: "治疗组 4 位主治医生", when: "科室晨会后", what: "用病例卡统一目标患者识别要点", why: "减少患者筛选阶段的非必要流失", success: "4 位医生能复述 3 个关键识别条件" },
@@ -30,6 +50,24 @@ window.ZG_DATA = {
       stage: "认知建立",
       target: "提高目标患者识别率并建立科室共识",
       progress: 51,
+      patientFlow: [
+        { stage: "门诊患者", volume: 164, rate: 100, status: "stable", note: "患者量充足" },
+        { stage: "目标识别", volume: 96, rate: 59, status: "risk", note: "医生之间识别口径差异明显" },
+        { stage: "方案讨论", volume: 71, rate: 43, status: "watch", note: "认知存在, 但缺少科室共识" },
+        { stage: "规范路径", volume: 46, rate: 28, status: "risk", note: "当前最值得改变的流程节点" },
+        { stage: "持续随访", volume: 39, rate: 24, status: "watch", note: "需要病例会后持续验证" }
+      ],
+      stakeholders: [
+        { id: "s-h2-1", name: "王静", role: "科主任", influence: 91, support: 58, relation: "关键推动者", action: "锁定下周病例共识会" },
+        { id: "s-h2-2", name: "门诊组", role: "执行群体", influence: 72, support: 52, relation: "标准不一", action: "用 3 类病例统一识别口径" },
+        { id: "s-h2-3", name: "护理随访组", role: "流程协同", influence: 61, support: 66, relation: "可协同", action: "明确随访节点与患者提醒" },
+        { id: "s-h2-4", name: "赵倩", role: "负责代表", influence: 70, support: 88, relation: "行动 Owner", action: "48 小时内确认病例会名单" }
+      ],
+      resources: [
+        { id: "r-h2-1", type: "代表", item: "病例会时间与名单确认", owner: "赵倩", timing: "48 小时内", lever: "Top 1", status: "doing" },
+        { id: "r-h2-2", type: "医学", item: "同级医院病例实践", owner: "医学经理", timing: "病例会前", lever: "Top 2", status: "ready" },
+        { id: "r-h2-3", type: "市场", item: "患者识别流程卡", owner: "产品经理", timing: "下周", lever: "Top 1", status: "planned" }
+      ],
       levers: [
         { rank: 1, title: "患者识别标准仍不统一", score: 89, detail: "门诊患者量充足, 但目标患者筛选口径不一致.", who: "王主任 / 门诊组", when: "下周病例讨论", what: "围绕 3 类典型患者做病例共识", why: "机会主要卡在患者识别而非治疗意愿", success: "形成科室内部患者识别共识" },
         { rank: 2, title: "核心医生缺少同级案例", score: 78, detail: "现有证据充分, 但本地区同级医院可参考实践不足.", who: "王主任", when: "本周四", what: "提供同级医院脱敏实践案例", why: "降低采用新路径的不确定性", success: "确认一次病例实践交流" },
@@ -48,6 +86,24 @@ window.ZG_DATA = {
       stage: "准入准备",
       target: "完成关键利益相关者地图和准入前教育",
       progress: 37,
+      patientFlow: [
+        { stage: "潜在患者", volume: 86, rate: 100, status: "watch", note: "患者机会仍需进一步确认" },
+        { stage: "关键科室", volume: 61, rate: 71, status: "watch", note: "科室路径初步明确" },
+        { stage: "决策链", volume: 35, rate: 41, status: "risk", note: "真正影响准入和使用的角色尚未完整识别" },
+        { stage: "准入准备", volume: 22, rate: 26, status: "risk", note: "不适合此时扩大活动投入" },
+        { stage: "正式推进", volume: 10, rate: 12, status: "risk", note: "先补信息, 再决定资源" }
+      ],
+      stakeholders: [
+        { id: "s-h3-1", name: "呼吸科主任", role: "核心学术角色", influence: 88, support: 46, relation: "待确认", action: "完成首次深度需求访谈" },
+        { id: "s-h3-2", name: "药学部", role: "准入角色", influence: 82, support: 40, relation: "关系未知", action: "补齐准入流程和影响点" },
+        { id: "s-h3-3", name: "分管院长", role: "管理决策者", influence: 90, support: 35, relation: "未触达", action: "暂不直接投入, 先确认真实影响链" },
+        { id: "s-h3-4", name: "地区经理", role: "资源 Owner", influence: 72, support: 90, relation: "内部", action: "暂停大型活动资源" }
+      ],
+      resources: [
+        { id: "r-h3-1", type: "经理", item: "关键影响者地图补齐", owner: "李明", timing: "两周内", lever: "Top 1", status: "doing" },
+        { id: "r-h3-2", type: "医学", item: "疾病路径教育小会", owner: "医学经理", timing: "地图完成后", lever: "Top 2", status: "planned" },
+        { id: "r-h3-3", type: "市场", item: "大型活动预算", owner: "区域市场", timing: "暂缓", lever: "Top 3", status: "hold" }
+      ],
       levers: [
         { rank: 1, title: "关键影响者地图不完整", score: 76, detail: "现阶段最大的未知是决策链和跨科室影响关系.", who: "科主任 / 药学 / 准入角色", when: "未来两周", what: "补齐医院生态图与角色影响力", why: "准入前需要先确认真正决策链", success: "完成 90% 关键角色映射" },
         { rank: 2, title: "医学教育需要前置", score: 65, detail: "部分核心角色对疾病管理新路径认知不足.", who: "核心学术骨干", when: "月度学术会", what: "围绕诊疗路径组织小型学术沟通", why: "为后续准入创造共同语言", success: "关键角色认可目标患者价值" },
@@ -71,6 +127,14 @@ window.ZG_DATA = {
       trigger: "周三 MDT 有一例高风险患者进入治疗方案讨论",
       gap: "认可疾病管理价值, 但对目标亚组的真实世界获益仍有疑问",
       targetBehavior: "愿意在 MDT 中主动讨论产品 A 适用方案",
+      preVisit: {
+        objective: "确认周主任在高风险患者方案选择中的两个核心决策标准, 并争取在周三 MDT 中讨论 1 例匹配患者.",
+        opening: "从上次提到的长期获益与安全性平衡切入, 不先讲产品.",
+        questions: ["这类高风险患者您现在最看重哪两个决策指标?", "什么情况下您会考虑调整现有方案?"],
+        objections: ["真实世界数据是否足够接近本科患者?", "长期获益与安全性如何平衡?"],
+        commitment: "请求把已审核证据带入周三 MDT 的 1 例患者讨论.",
+        checklist: ["确认本次唯一目标", "准备 1 组场景匹配证据", "预演 2 个探询问题", "确认合规边界", "设计结束阶段具体承诺"]
+      },
       script: [
         ["开场", "周主任, 上次您提到高风险患者最担心长期获益与安全性的平衡. 我准备了一个和您本周 MDT 病例非常接近的数据."],
         ["探询", "对于这类合并多重风险因素的患者, 您现在决定治疗方案时最看重哪两个指标?"],
@@ -98,6 +162,14 @@ window.ZG_DATA = {
       trigger: "本周承担住院组病例讨论",
       gap: "对患者识别边界不够清晰",
       targetBehavior: "能准确识别目标患者并愿意进一步了解",
+      preVisit: {
+        objective: "帮助陈浩明确边界患者识别标准, 并锁定下一次住院组共同判断病例.",
+        opening: "直接回应上次提出的患者边界问题.",
+        questions: ["您最容易犹豫的是哪一类边界患者?", "当前住院组对这类患者的判断差异主要在哪里?"],
+        objections: ["指南边界是否足够清楚?", "不同患者基础情况如何判断?"],
+        commitment: "确认下一次住院组讨论 1 例边界患者的时间.",
+        checklist: ["选好 3 类边界病例", "准备指南对应页", "明确探询顺序", "避免只讲数据", "必须形成具体下一步承诺"]
+      },
       script: [
         ["开场", "陈医生, 上次您问到目标患者边界, 我把指南和几个真实病例放到了一起."],
         ["探询", "您在病房最容易犹豫的是哪一类边界患者?"],
@@ -125,6 +197,14 @@ window.ZG_DATA = {
       trigger: "下周病例讨论会",
       gap: "尚未形成一致患者识别与随访路径",
       targetBehavior: "同意组织一次病例共识讨论",
+      preVisit: {
+        objective: "把王主任对流程问题的认可转成一次具体病例共识会.",
+        opening: "先谈患者识别流程, 不从产品开始.",
+        questions: ["哪一类患者最容易在门诊识别上产生差异?", "如果统一标准, 您最希望先解决哪个流程节点?"],
+        objections: ["科室时间是否允许?", "病例会是否值得投入?"],
+        commitment: "锁定病例会日期、参与医生和 3 个病例.",
+        checklist: ["确认病例会候选时间", "准备同级医院实践", "准备 3 类病例", "明确 20 分钟议程", "结束时确认名单与时间"]
+      },
       script: [
         ["开场", "王主任, 贵科患者量很大, 真正的机会可能不是增加覆盖, 而是把患者识别流程先统一起来."],
         ["探询", "目前门诊里哪一类患者最容易在识别和随访上出现差异?"],
