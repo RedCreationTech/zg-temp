@@ -2413,7 +2413,7 @@
       });
     });
 
-    $("[data-team-filter]").forEach(function (el) {
+    $$("[data-team-filter]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.teamCoachingFilter = el.getAttribute("data-team-filter");
         saveState();
@@ -2421,19 +2421,19 @@
       });
     });
 
-    $("[data-team-detail]").forEach(function (el) {
+    $$("[data-team-detail]").forEach(function (el) {
       el.addEventListener("click", function () {
         openTeamRepCoaching(el.getAttribute("data-team-detail"), false);
       });
     });
 
-    $("[data-team-practice]").forEach(function (el) {
+    $$("[data-team-practice]").forEach(function (el) {
       el.addEventListener("click", function () {
         openTeamRepCoaching(el.getAttribute("data-team-practice"), true);
       });
     });
 
-    $("[data-doctor-id]").forEach(function (el) {
+    $$("[data-doctor-id]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.selectedDoctor = el.getAttribute("data-doctor-id");
         render();
