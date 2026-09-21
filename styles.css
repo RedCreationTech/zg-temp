@@ -830,7 +830,7 @@
 .tower-hero>div:last-child strong{display:block;font-size:34px;line-height:1}
 .tower-hero>div:last-child span{display:block;font-size:8px;color:#9dafc9;margin-top:6px}
 
-.tower-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}
+.tower-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:9px}
 .tower-kpis>div{padding:12px;border:1px solid #e3e9f1;border-radius:11px;background:#fff}
 .tower-kpis>div.good{background:#eff9f4;border-color:#d5eadf}
 .tower-kpis>div.risk{background:#fff5f1;border-color:#ecd5ce}
