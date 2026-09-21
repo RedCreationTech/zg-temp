@@ -218,6 +218,79 @@ window.ZG_DATA = {
       ]
     }
   ],
+  repDay: {
+    rep: "张蕾",
+    region: "华东区",
+    date: "2026.09.21",
+    summary: "今天 4 次客户互动, 其中 2 次需要形成明确行为承诺.",
+    visits: [
+      {
+        id: "rv1",
+        time: "09:00",
+        doctorId: "d2",
+        hospitalId: "h1",
+        doctor: "陈浩",
+        hospital: "华东大学附属第一医院",
+        department: "心内科",
+        type: "病房拜访",
+        purpose: "明确边界患者识别标准",
+        urgency: "中",
+        status: "done",
+        travel: "已完成",
+        success: "确认下一次住院组共同判断 1 例边界患者"
+      },
+      {
+        id: "rv2",
+        time: "11:30",
+        doctorId: "d1",
+        hospitalId: "h1",
+        doctor: "周敏",
+        hospital: "华东大学附属第一医院",
+        department: "心内科",
+        type: "重点拜访",
+        purpose: "为周三 MDT 做方案选择场景准备",
+        urgency: "高",
+        status: "next",
+        travel: "距开始 35 分钟",
+        success: "同意在 MDT 中讨论 1 例匹配患者"
+      },
+      {
+        id: "rv3",
+        time: "14:40",
+        doctorId: "d3",
+        hospitalId: "h2",
+        doctor: "王静",
+        hospital: "滨江中心医院",
+        department: "内分泌科",
+        type: "流程沟通",
+        purpose: "确认病例共识会时间与参与名单",
+        urgency: "高",
+        status: "planned",
+        travel: "13:55 出发",
+        success: "确认病例会日期、参与医生和 3 个病例"
+      },
+      {
+        id: "rv4",
+        time: "16:30",
+        doctorId: "d2",
+        hospitalId: "h1",
+        doctor: "陈浩",
+        hospital: "华东大学附属第一医院",
+        department: "心内科",
+        type: "资料跟进",
+        purpose: "发送指南页并确认病例讨论安排",
+        urgency: "低",
+        status: "planned",
+        travel: "线上",
+        success: "收到明确时间回复"
+      }
+    ],
+    quickTasks: [
+      { id: "qt1", title: "查看周敏最新触发信号", source: "Doctor Agent", done: false },
+      { id: "qt2", title: "预演两个高风险患者探询问题", source: "AI 陪练", done: false },
+      { id: "qt3", title: "确认滨江病例会候选时间", source: "Hospital Agent", done: false }
+    ]
+  },
   visits: [
     {
       id: "v1",
