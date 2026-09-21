@@ -16,6 +16,52 @@
     admin: "组织与权限"
   };
 
+  var SCENARIOS = {
+    hospital_attack: {
+      id: "hospital_attack",
+      name: "重点医院攻坚",
+      role: "地区经理",
+      hospitalId: "h1",
+      doctorId: "d1",
+      visitId: "v1",
+      tag: "Hospital → Doctor → Coaching",
+      description: "投入不少但核心科室推进慢. 先找到医院杠杆点, 再落到周主任的一次真实 MDT 决策.",
+      outcome: "从“多拜访”切换为“改变一次关键决策场景”"
+    },
+    doctor_breakthrough: {
+      id: "doctor_breakthrough",
+      name: "关键医生突破",
+      role: "医药代表",
+      hospitalId: "h2",
+      doctorId: "d3",
+      visitId: "v3",
+      tag: "Doctor NBA",
+      description: "医院患者量充足, 但患者识别标准不一致. 代表需要把医生兴趣转成一次病例共识行动.",
+      outcome: "从“医生觉得不错”推进到“确认病例讨论会”"
+    },
+    coaching_recovery: {
+      id: "coaching_recovery",
+      name: "拜访失效修复",
+      role: "地区经理",
+      hospitalId: "h1",
+      doctorId: "d2",
+      visitId: "v2",
+      tag: "Visit Coaching",
+      description: "内容讲清楚了, 但拜访结束没有形成任何承诺. 经理要快速定位失效点并完成关键句替换.",
+      outcome: "从“下次再来”改成“具体病例 + 具体时间”"
+    }
+  };
+
+  var DEMO_TOUR = [
+    { route: "dashboard", kicker: "01 / ACTION", title: "先看今天真正值得做什么", desc: "AI GPS 不是把数据再展示一遍, 而是把医院、医生和拜访信号收敛成少数高优先 NBA." },
+    { route: "hospital", kicker: "02 / HOSPITAL", title: "找到医院最值得打的业务杠杆", desc: "从机会价值和可改变程度出发, 避免平均投入, 形成 WHO / WHEN / WHAT / SUCCESS." },
+    { route: "doctor", kicker: "03 / DOCTOR", title: "把医院策略落到一次医生行动", desc: "围绕真实触发场景判断为什么现在打、说什么、怎么推进以及目标行为." },
+    { route: "coaching", kicker: "04 / COACHING", title: "复盘一次失效拜访并替换关键动作", desc: "经理看到的不只是评分, 而是下一次拜访具体要改哪句话、检查什么证据." },
+    { route: "cockpit", kicker: "05 / MANAGEMENT", title: "管理层只处理真正需要介入的动作", desc: "加资源、纠偏、升级或停止, 而不是月底再看一张结果报表." },
+    { route: "learning", kicker: "06 / LEARNING", title: "让真实 Outcome 回流为组织判断能力", desc: "有效和无效动作形成 RuleValidation, 高风险规则仍保留 Human Review." },
+    { route: "pilot", kicker: "07 / PILOT", title: "最后用 8 周 Pilot 验证产品价值", desc: "验证客户愿意用、行动真的发生、结果能回流, 再决定扩展到更多 Agent 和区域." }
+  ];
+
   var saved = {};
   try {
     saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
@@ -44,7 +90,10 @@
     recentNBAs: [],
     outcomes: [],
     serverActions: [],
-    ruleValidations: []
+    ruleValidations: [],
+    demoScenario: saved.demoScenario || "hospital_attack",
+    demoTourActive: false,
+    demoTourStep: 0
   };
 
   var $ = function (selector, root) { return (root || document).querySelector(selector); };
@@ -59,7 +108,8 @@
       selectedVisit: state.selectedVisit,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
-      session: state.session
+      session: state.session,
+      demoScenario: state.demoScenario
     }));
   }
 
@@ -121,6 +171,120 @@
     }).join("") + '</div>';
   }
 
+  function renderScenarioDeck() {
+    var current = SCENARIOS[state.demoScenario] || SCENARIOS.hospital_attack;
+    var cards = Object.keys(SCENARIOS).map(function (key) {
+      var s = SCENARIOS[key];
+      return '<button class="scenario-card ' + (key === state.demoScenario ? 'active' : '') + '" data-scenario="' + key + '">' +
+        '<div class="scenario-top"><span class="scenario-role">' + esc(s.role) + '</span><span class="scenario-tag">' + esc(s.tag) + '</span></div>' +
+        '<strong>' + esc(s.name) + '</strong><p>' + esc(s.description) + '</p>' +
+        '<div class="scenario-outcome"><b>目标改变</b><span>' + esc(s.outcome) + '</span></div>' +
+      '</button>';
+    }).join("");
+
+    return '<section class="scenario-section">' +
+      '<div class="scenario-heading"><div><span class="eyebrow">DEMO SCENARIO</span><h3>客户演示场景</h3><p>先选一个真实业务故事, 系统会自动切到对应角色、医院、医生和拜访记录.</p></div>' +
+      '<button class="btn primary" data-start-tour><span>▶</span> 开始 7 步演示</button></div>' +
+      '<div class="scenario-grid">' + cards + '</div>' +
+      '<div class="scenario-current"><span>当前故事</span><strong>' + esc(current.name) + '</strong><em>→</em><span>' + esc(current.outcome) + '</span></div>' +
+    '</section>';
+  }
+
+  function selectScenario(id, silent) {
+    var s = SCENARIOS[id];
+    if (!s) return;
+    state.demoScenario = id;
+    state.role = s.role;
+    state.selectedHospital = s.hospitalId;
+    state.selectedDoctor = s.doctorId;
+    state.selectedVisit = s.visitId;
+    state.coachingTab = "review";
+    state.actionFilter = "all";
+    saveState();
+    render();
+    if (!silent) showToast("已切换演示场景: " + s.name);
+  }
+
+  function ensureDemoTourShell() {
+    var launcher = $("#demoTourLauncher");
+    if (!launcher) {
+      launcher = document.createElement("button");
+      launcher.id = "demoTourLauncher";
+      launcher.className = "demo-tour-launcher";
+      launcher.innerHTML = '<span>▶</span><b>客户演示</b>';
+      document.body.appendChild(launcher);
+      launcher.addEventListener("click", function () { startDemoTour(); });
+    }
+
+    var bar = $("#demoTourBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "demoTourBar";
+      bar.className = "demo-tour-bar";
+      bar.innerHTML =
+        '<button class="demo-tour-close" id="demoTourClose">×</button>' +
+        '<div class="demo-tour-copy"><span id="demoTourKicker"></span><strong id="demoTourTitle"></strong><p id="demoTourDesc"></p></div>' +
+        '<div class="demo-tour-progress" id="demoTourProgress"></div>' +
+        '<div class="demo-tour-actions"><button class="btn ghost" id="demoTourPrev">上一步</button><button class="btn primary" id="demoTourNext">下一步</button></div>';
+      document.body.appendChild(bar);
+      $("#demoTourClose").addEventListener("click", stopDemoTour);
+      $("#demoTourPrev").addEventListener("click", function () { stepDemoTour(-1); });
+      $("#demoTourNext").addEventListener("click", function () { stepDemoTour(1); });
+    }
+    updateDemoTourShell();
+  }
+
+  function startDemoTour() {
+    state.demoTourActive = true;
+    state.demoTourStep = 0;
+    var s = SCENARIOS[state.demoScenario] || SCENARIOS.hospital_attack;
+    state.role = s.role;
+    state.selectedHospital = s.hospitalId;
+    state.selectedDoctor = s.doctorId;
+    state.selectedVisit = s.visitId;
+    navigate(DEMO_TOUR[0].route);
+    updateDemoTourShell();
+  }
+
+  function stopDemoTour() {
+    state.demoTourActive = false;
+    updateDemoTourShell();
+    showToast("已退出客户演示导览");
+  }
+
+  function stepDemoTour(delta) {
+    if (!state.demoTourActive) return;
+    var next = state.demoTourStep + delta;
+    if (next < 0) next = 0;
+    if (next >= DEMO_TOUR.length) {
+      stopDemoTour();
+      showToast("7 步演示完成");
+      return;
+    }
+    state.demoTourStep = next;
+    navigate(DEMO_TOUR[next].route);
+    updateDemoTourShell();
+  }
+
+  function updateDemoTourShell() {
+    var launcher = $("#demoTourLauncher");
+    var bar = $("#demoTourBar");
+    if (!launcher || !bar) return;
+    launcher.style.display = state.demoTourActive ? "none" : "flex";
+    bar.classList.toggle("show", state.demoTourActive);
+    if (!state.demoTourActive) return;
+
+    var step = DEMO_TOUR[state.demoTourStep];
+    $("#demoTourKicker").textContent = step.kicker;
+    $("#demoTourTitle").textContent = step.title;
+    $("#demoTourDesc").textContent = step.desc;
+    $("#demoTourPrev").disabled = state.demoTourStep === 0;
+    $("#demoTourNext").textContent = state.demoTourStep === DEMO_TOUR.length - 1 ? "完成演示" : "下一步";
+    $("#demoTourProgress").innerHTML = DEMO_TOUR.map(function (_, i) {
+      return '<i class="' + (i <= state.demoTourStep ? 'active' : '') + '"></i>';
+    }).join("");
+  }
+
   function renderDashboard() {
     var all = data.actions;
     var filtered = state.actionFilter === "all" ? all : all.filter(function (a) { return getActionStatus(a) === state.actionFilter; });
@@ -151,6 +315,7 @@
       '<div class="hero-copy"><span class="eyebrow">SYSTEM OF ACTION</span><h2>' + esc(state.role) + ', 今天先做这几件事</h2><p>' + esc(roleGreeting()) + '</p></div>' +
       '<div class="hero-meta"><span class="date-chip">2026.09.21 · 周一</span><span class="soft-chip">Pilot 第 4 周</span></div>' +
     '</div>' +
+    renderScenarioDeck() +
     '<div class="metric-grid">' +
       metric("本周重点医院", "12", "3 家需要经理介入", "+2", "院") +
       metric("高优先 NBA", "18", "6 个尚未执行", "+5", "A") +
@@ -838,6 +1003,8 @@
 
     $("#appContent").innerHTML = view;
     bindViewEvents();
+    ensureDemoTourShell();
+    updateDemoTourShell();
     saveState();
   }
 
@@ -846,7 +1013,17 @@
       el.addEventListener("click", function () { openAction(el.getAttribute("data-action-id")); });
     });
 
-    $$("[data-filter]").forEach(function (el) {
+    $("[data-scenario]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        selectScenario(el.getAttribute("data-scenario"));
+      });
+    });
+
+    $("[data-start-tour]").forEach(function (el) {
+      el.addEventListener("click", function () { startDemoTour(); });
+    });
+
+    $("[data-filter]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.actionFilter = el.getAttribute("data-filter");
         render();
