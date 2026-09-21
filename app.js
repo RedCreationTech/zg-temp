@@ -995,7 +995,8 @@
       '<div class="filter-bar"><select class="select-box" id="visitSelect">' + visitOptions + '</select><div class="filter-group"><span class="status ' + (v.severity === "高" ? "risk" : "done") + '">' + esc(v.severity) + '优先级</span><span class="date-chip">' + esc(v.hospital) + '</span></div></div>' +
       renderManagementSignal(managementForVisit(v.id), "经理辅导") +
       fieldSignal +
-      '<div class="grid-2">' +
+      '<div class="mt-16">' + renderThreeMinuteReview(v, liveSession) + '</div>' +
+      '<div class="grid-2 mt-16">' +
         panel("拜访质量诊断", v.rep + ' → ' + v.doctor + ' · ' + v.time,
           '<div class="coaching-score"><div class="score-ring" style="background:conic-gradient(#5879df 0 ' + v.score + '%,#e8edf5 ' + v.score + '% 100%)"><div><strong>' + v.score + '</strong><span>综合得分</span></div></div><div>' + dims + '</div></div>'
         ) +
@@ -1005,6 +1006,7 @@
       '</div>' +
       '<section class="panel mt-16"><div class="panel-head"><div class="panel-title"><div><h3>结构化辅导工作台</h3><span>复盘 → 诊断 → 改进 → 演练 → 跟进</span></div></div></div><div class="panel-body"><div class="section-tabs">' + tabs + '</div>' + tabBody + '</div></section>' +
       '<div class="mt-16">' + renderCoachingRewrite(v) + '</div>' +
+      '<div class="mt-16">' + renderRoleplay(v) + '</div>' +
       '<div class="mt-16">' + renderVoiceReview(v) + '</div>';
   }
 
@@ -1581,9 +1583,41 @@
     });
   }
 
-  async function processVisitAudio(file) {
+  async function processVisitAudio(file, inlineMode) {
     showToast("正在转写并识别关键片段");
     var result = await window.ZG_API.transcribeVisit(file || { name: "demo-visit.m4a" });
+    var v = data.visits.find(function (x) { return x.id === state.selectedVisit; }) || data.visits[0];
+
+    result.diagnosis.topIssue = v.issue;
+    result.diagnosis.score = v.score;
+    result.diagnosis.evidence = v.summary;
+    result.diagnosis.nextAction = v.nextScript;
+
+    if (v.id === "v2") {
+      result.transcript = [
+        { speaker: "代表", time: "00:22", text: "陈医生, 上次您问到边界患者, 我把几个病例放到了一起." },
+        { speaker: "医生", time: "04:18", text: "这几个病例挺有意思的, 我回头再看看." },
+        { speaker: "代表", time: "07:36", text: "好的, 那您有空再看看, 我下次再来." }
+      ];
+    } else if (v.id === "v3") {
+      result.transcript = [
+        { speaker: "代表", time: "00:31", text: "王主任, 贵科真正的机会可能是把患者识别流程先统一起来." },
+        { speaker: "医生", time: "03:52", text: "这个问题确实一直存在, 你说的病例讨论方式可以试试." },
+        { speaker: "代表", time: "07:10", text: "那我们下周用 20 分钟, 先拿三个病例把标准跑一遍." }
+      ];
+    }
+
+    state.audioReviews[v.id] = result;
+    var review = coachingReviewSession(v.id);
+    review.generated = true;
+    saveState();
+
+    if (inlineMode) {
+      render();
+      showToast("3 分钟复盘已生成");
+      return result;
+    }
+
     var transcript = result.transcript.map(function (x) {
       return '<div class="transcript-item"><span class="speaker">' + esc(x.speaker) + '</span><time>' + esc(x.time) + '</time><p>' + esc(x.text) + '</p></div>';
     }).join("");
@@ -1592,6 +1626,7 @@
       '<div class="drawer-section"><h4>AI 诊断</h4><div class="drawer-callout"><strong>' + esc(result.diagnosis.topIssue) + ' · ' + result.diagnosis.score + ' 分</strong><p>' + esc(result.diagnosis.evidence) + '</p></div></div>' +
       '<div class="drawer-success"><span>→</span><span>' + esc(result.diagnosis.nextAction) + '</span></div>';
     openDrawer("语音复盘结果", body, null);
+    return result;
   }
 
   function ensureLogin() {
@@ -1924,8 +1959,72 @@
       });
     });
 
-    $$("[data-live-finish]").forEach(function (el) {
+    $("[data-live-finish]").forEach(function (el) {
       el.addEventListener("click", finishLiveVisit);
+    });
+
+    $("[data-start-three-review]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        processVisitAudio(null, true);
+      });
+    });
+
+    $("[data-review-accept-issue]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var review = coachingReviewSession(state.selectedVisit);
+        review.issueAccepted = true;
+        saveState();
+        render();
+        showToast("已锁定本次 Top 1 改进点");
+      });
+    });
+
+    $("[data-roleplay-choice]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var v = data.visits.find(function (x) { return x.id === state.selectedVisit; }) || data.visits[0];
+        var session = coachingRoleplaySession(v.id);
+        var config = roleplayConfig(v);
+        var choiceIndex = Number(el.getAttribute("data-roleplay-choice"));
+        var choice = config.choices[choiceIndex];
+        if (!choice) return;
+        session.lastChoice = choiceIndex;
+        session.lastScore = choice.score;
+        session.attempts.push({ choice: choiceIndex, score: choice.score, at: new Date().toISOString() });
+        saveState();
+        render();
+        showToast("医生已回应 · 本轮 " + choice.score + " 分");
+      });
+    });
+
+    $("[data-roleplay-retry]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var session = coachingRoleplaySession(state.selectedVisit);
+        session.lastChoice = null;
+        session.lastScore = null;
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-roleplay-complete]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var v = data.visits.find(function (x) { return x.id === state.selectedVisit; }) || data.visits[0];
+        var session = coachingRoleplaySession(v.id);
+        var best = session.attempts.reduce(function(max,a){return Math.max(max,Number(a.score||0));},0);
+        if (best < 85) {
+          showToast("Best Score 需要达到 85 才能完成陪练");
+          return;
+        }
+        session.completed = true;
+        var review = coachingReviewSession(v.id);
+        review.nextActionAccepted = true;
+        review.completed = true;
+        if (v.id === "v2") state.actionStatus.a7 = "doing";
+        else state.actionStatus.a3 = "doing";
+        saveState();
+        render();
+        showToast("陪练完成, 下一次打法已锁定");
+      });
     });
 
     $$("[data-doctor-id]").forEach(function (el) {
@@ -2040,7 +2139,7 @@
     var demoVoice = $("#demoVoiceBtn");
     if (demoVoice) demoVoice.addEventListener("click", function () { processVisitAudio(null); });
 
-    $(".eco-node").forEach(function (el) {
+    $$(".eco-node").forEach(function (el) {
       el.addEventListener("click", function () {
         showToast(el.querySelector("strong").textContent + " · 已定位关系节点");
       });
