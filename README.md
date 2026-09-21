@@ -410,7 +410,94 @@ MANAGER CHECK EVIDENCE
 
 这条流程目前全部在浏览器中模拟。
 
-### 5. Visit Coaching Agent
+### 5. 团队辅导工作台
+
+地区经理现在先进入团队层，再决定今天要辅导谁。
+
+团队工作台展示：
+
+- 团队最近重点拜访质量
+- 高优先辅导人数
+- AI 陪练完成度
+- 明确客户承诺率
+- 代表辅导优先级
+- 最近 4 次拜访趋势
+- 重复失效问题
+- 陪练状态
+- NBA 完成率
+- 下一步经理动作
+
+支持 4 个快速筛选：
+
+```text
+辅导优先级
+需立即辅导
+陪练未完成
+正在改善
+```
+
+每个代表卡片都可以直接：
+
+```text
+查看拜访
+→ 单次 Coaching
+
+立即开始陪练
+→ 3 分钟复盘
+→ Top 1 问题
+→ 四轮 AI 模拟
+```
+
+#### 团队反复失效模式
+
+经理不再逐个人凭经验判断，而是能看到团队本周反复出现的问题，例如：
+
+- 没有明确下一步承诺
+- 证据先于有效探询
+- 呈现内容与当前 Context 不匹配
+- 一次拜访同时推进多个目标
+
+每个失效模式展示：
+
+- 本周出现次数
+- 占比
+- 与上周变化
+- 对应能力维度
+- 推荐团队辅导动作
+
+#### 陪练完成度
+
+团队页面直接展示每个人四轮 AI 陪练进度：
+
+```text
+未开始
+进行中 2/4
+已通过
+```
+
+点击代表可以继续未完成的陪练。
+
+#### 团队能力热力图
+
+能力热力图包含：
+
+- 目标清晰
+- 探询质量
+- 证据匹配
+- 异议处理
+- 推进承诺
+
+评分会同时参考：
+
+```text
+真实拜访评分
++
+AI 四轮模拟结果
+```
+
+因此完成陪练后，团队能力画像和辅导优先级会随前端状态变化。
+
+### 6. Visit Coaching Agent
 
 围绕一次真实拜访复盘展示：
 
@@ -538,7 +625,7 @@ Pilot Operations 的核心指标已经改为随当前前端状态动态计算，
 → 是否扩展
 ```
 
-### 6. Director Decision Cockpit
+### 7. Director Decision Cockpit
 
 围绕管理层的五个问题：
 
@@ -561,7 +648,7 @@ Pilot Operations 的核心指标已经改为随当前前端状态动态计算，
 - 决策反向联动 Hospital / Doctor / Coaching
 - Action → Outcome
 
-### 7. Pilot Operations
+### 8. Pilot Operations
 
 模拟 8 周付费 Pilot：
 
@@ -585,7 +672,7 @@ W8 价值评估
 - Product Proof
 - Scale Readiness
 
-### 8. Learning Engine
+### 9. Learning Engine
 
 用于演示：
 
@@ -610,7 +697,7 @@ Context
 
 全部为前端模拟。
 
-### 9. Enterprise Guardrails
+### 10. Enterprise Guardrails
 
 展示企业级要求：
 
@@ -624,7 +711,7 @@ Context
 - 审计
 - SaaS / 私有化 / 混合部署概念
 
-### 10. Organization & Access
+### 11. Organization & Access
 
 展示：
 
