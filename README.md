@@ -812,6 +812,214 @@ Scale Operations Cockpit
 Day 60 / Day 90 Review
 ```
 
+## 本轮 National Rollout Control Tower
+
+总部级能力继续从 Portfolio Planning 推进到全国 Rollout Control Tower.
+
+新增左侧入口:
+
+```text
+全国控制塔
+→ National Rollout Control Tower
+```
+
+Control Tower 不建立第二套孤立数据, 而是直接读取现有:
+
+- Pilot
+- Scale Gate
+- 30 / 60 / 90 Execution
+- Risk / Delay
+- Recovery Plan
+- Value Evidence
+- Repeatability Evidence
+- Scale Portfolio
+- Wave Planning
+- Shared Resource
+- 一线 Hospital / Doctor / Action / Visit Demo 数据
+
+### Exception Center
+
+系统会根据当前状态动态生成总部异常, 包括:
+
+- Wave 预算容量超限
+- Wave 并行区域超限
+- 医学 / 数据 / 销售卓越等共享资源冲突
+- 正式 Scale 区域存在风险或延期
+- Recovery Plan Owner Commitment 未完成
+- Day 60 已到但 Value Evidence 未闭环
+- Day 90 已到但 Repeatability Evidence 未闭环
+- 正式扩区区域在 Portfolio 层被标记暂停
+- Data Readiness 不足的候选区域被提前排入 Wave 1
+- Portfolio Executive Review 与当前情景不一致
+
+每条异常支持:
+
+```text
+确认
+升级
+关闭
+```
+
+异常状态会进入总部 Decision Log.
+
+### Rollout Dependency Map
+
+Control Tower 明确展示扩区前后依赖关系:
+
+```text
+Pilot Proof
+↓
+正式 Scale Decision
+↓
+Day 30 Launch Gate
+↓
+Day 60 Value Gate
+↓
+Day 90 Scale Review
+↓
+下一轮正式扩区
+```
+
+另外单独检查:
+
+```text
+Wave Budget
++
+Parallel Limit
++
+Shared Resource Capacity
+```
+
+避免在前一阶段未通过时, 把后续页面操作误认为正式业务进度.
+
+### What-if Simulator
+
+新增总部 What-if 模拟:
+
+```text
+暂停一个区域
+加速候选区域
+预算容量 -20%
+预算容量 +20%
+```
+
+模拟结果会显示:
+
+- 资源点变化
+- Wave 并行度变化
+- 是否突破当前情景容量
+- Data Readiness 风险
+- 对正式 90 天计划的边界影响
+
+模拟默认不会改变真实前端状态.
+
+可以选择:
+
+```text
+记录决策草案
+```
+
+或在明确操作后:
+
+```text
+应用策略到 Portfolio
+```
+
+正式 Scale 区域的 90 天计划仍由 Management Gate 管理, Control Tower 不会偷偷改写.
+
+### 全国 Drill-down Explorer
+
+增加总部穿透链:
+
+```text
+全国
+↓
+区域
+↓
+医院
+↓
+医生
+↓
+Action
+↓
+Visit / Outcome Signal
+```
+
+华东一区使用当前已经存在的真实 Demo 数据, 可以完整穿透到:
+
+- 华东大学附属第一医院
+- 滨江中心医院
+- 海川人民医院
+- 对应医生
+- 当前 Action
+- Action 状态
+- 最近拜访结果
+- 拜访评分
+- Outcome / Visit Signal
+
+并可以从 Control Tower 直接跳回:
+
+```text
+Hospital Agent
+Doctor Agent
+```
+
+对于尚未接入医生级数据的 Scale 候选医院, 页面明确显示:
+
+```text
+医生级运营数据尚未接入
+```
+
+不会自动生成虚假的 Doctor / Action / Outcome.
+
+### HQ Decision Log
+
+总部决策日志统一汇总:
+
+- Scale Decision
+- Director Management Action
+- Wave 调整
+- 区域节奏调整
+- 共享资源预留
+- 异常确认 / 升级 / 关闭
+- What-if 决策草案
+- Portfolio Executive Review
+
+形成总部层面的管理时间线.
+
+### 当前全国 Rollout 完整链路
+
+```text
+Doctor / Hospital / Coaching
+↓
+Outcome / Learning
+↓
+Weekly Review / Director Decision
+↓
+Pilot
+↓
+Scale Gate
+↓
+90-Day Execution
+↓
+Value / Repeatability Evidence
+↓
+Scale Portfolio
+↓
+Wave Planning
+↓
+National Rollout Control Tower
+├── Exception Center
+├── Dependency Map
+├── What-if Simulator
+├── HQ Decision Log
+└── Drill-down Explorer
+↓
+下一轮 Scale Decision
+```
+
+以上仍然全部为浏览器端演示状态, 不连接真实生产系统.
+
 ## 本轮 Portfolio Wave Planning / Executive Review
 
 Scale Portfolio 现在不再只是区域组合监控, 而是进一步增加总部季度级 Rollout 编排.
