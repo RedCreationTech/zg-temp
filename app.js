@@ -184,7 +184,7 @@
 
     return '<section class="scenario-section">' +
       '<div class="scenario-heading"><div><span class="eyebrow">DEMO SCENARIO</span><h3>客户演示场景</h3><p>先选一个真实业务故事, 系统会自动切到对应角色、医院、医生和拜访记录.</p></div>' +
-      '<button class="btn primary" data-start-tour><span>▶</span> 开始 7 步演示</button></div>' +
+      '<div class="scenario-actions"><button class="btn ghost" data-reset-prototype>重置演示</button><button class="btn primary" data-start-tour><span>▶</span> 开始 7 步演示</button></div></div>' +
       '<div class="scenario-grid">' + cards + '</div>' +
       '<div class="scenario-current"><span>当前故事</span><strong>' + esc(current.name) + '</strong><em>→</em><span>' + esc(current.outcome) + '</span></div>' +
     '</section>';
@@ -206,6 +206,13 @@
     return panel("Agent Team 行动交接", "同一个业务目标在不同角色之间继续推进 · 当前故事: " + current.name,
       '<div class="handoff-chain">' + html + '</div>'
     );
+  }
+
+  function resetFrontendPrototype() {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem("zg-ai-gps-frontend-prototype-v1");
+    showToast("演示状态已重置");
+    setTimeout(function () { window.location.reload(); }, 260);
   }
 
   function selectScenario(id, silent) {
@@ -1067,7 +1074,7 @@
       el.addEventListener("click", function () { openAction(el.getAttribute("data-action-id")); });
     });
 
-    $("[data-scenario]").forEach(function (el) {
+    $$("[data-scenario]").forEach(function (el) {
       el.addEventListener("click", function () {
         selectScenario(el.getAttribute("data-scenario"));
       });
@@ -1077,7 +1084,11 @@
       el.addEventListener("click", function () { startDemoTour(); });
     });
 
-    $("[data-filter]").forEach(function (el) {
+    $("[data-reset-prototype]").forEach(function (el) {
+      el.addEventListener("click", resetFrontendPrototype);
+    });
+
+    $$("[data-filter]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.actionFilter = el.getAttribute("data-filter");
         render();
@@ -1088,13 +1099,13 @@
       el.addEventListener("click", function () { navigate(el.getAttribute("data-route-jump")); });
     });
 
-    $("[data-evidence-index]").forEach(function (el) {
+    $$("[data-evidence-index]").forEach(function (el) {
       el.addEventListener("click", function () {
         openEvidenceTrace(Number(el.getAttribute("data-evidence-index")));
       });
     });
 
-    $("[data-doctor-id]").forEach(function (el) {
+    $$("[data-doctor-id]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.selectedDoctor = el.getAttribute("data-doctor-id");
         render();
@@ -1130,13 +1141,13 @@
       });
     });
 
-    $("[data-rule]").forEach(function (el) {
+    $$("[data-rule]").forEach(function (el) {
       el.addEventListener("click", function () {
         openCustom("rule", el.getAttribute("data-rule"));
       });
     });
 
-    $("[data-ai-generate]").forEach(function (el) {
+    $$("[data-ai-generate]").forEach(function (el) {
       el.addEventListener("click", function () {
         startAIGeneration(el.getAttribute("data-ai-generate"));
       });
@@ -1148,7 +1159,7 @@
     var refreshDecisionTrace = $("#refreshDecisionTrace");
     if (refreshDecisionTrace) refreshDecisionTrace.addEventListener("click", refreshDecisionData);
 
-    $("[data-rule-validation]").forEach(function (el) {
+    $$("[data-rule-validation]").forEach(function (el) {
       el.addEventListener("click", async function () {
         var id = el.getAttribute("data-rule-validation");
         var action = el.getAttribute("data-review-action");
