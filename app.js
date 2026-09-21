@@ -3047,8 +3047,12 @@
     var phaseId = gatePhaseId(gateId);
     var progress = scalePlanPhaseProgress(plan,phaseId);
     var risks = scaleExecutionRiskRegister(plan).filter(function(r){ return r.phase === (plan.phases.find(function(p){return p.id===phaseId;})||{}).label; });
-    if (status === "pass" && (progress.pct < 100 || risks.length)) {
-      showToast("存在未完成任务或风险, 不能直接标记“通过”");
+    var dataDone = (plan.dataChecklist || []).filter(function(item,i){
+      return !!state.scaleExecutionChecks["data-" + (i+1)];
+    }).length;
+    var dataPct = (plan.dataChecklist || []).length ? Math.round(dataDone/(plan.dataChecklist || []).length*100) : 100;
+    if (status === "pass" && (progress.pct < 100 || risks.length || (gateId === "g30" && dataPct < 90))) {
+      showToast(gateId === "g30" && dataPct < 90 ? "Day 30 通过前, 数据准备清单需达到 90%" : "存在未完成任务或风险, 不能直接标记“通过”");
       return;
     }
     state.scaleExecutionGateReviews[gateId] = {
@@ -3138,7 +3142,10 @@
 
     var tasks = phase.tasks.map(function(t,i){
       var done = !!state.scaleExecutionChecks[t.id];
-      return '<button class="scale-plan-task ' + (done ? "done" : "") + '" data-scale-plan-task="' + t.id + '"><span class="scale-task-check">' + (done ? "✓" : "") + '</span><div><b>0' + (i+1) + ' · ' + esc(t.owner) + '</b><strong>' + esc(t.title) + '</strong><p>Success · ' + esc(t.success) + '</p></div></button>';
+      var risk = !!state.scaleExecutionRisks[t.id];
+      var window = scalePhaseWindow(phase.id);
+      var delayed = !done && Number(state.scaleExecutionDay || 1) > window.end;
+      return '<article class="scale-plan-task ' + (done ? "done" : "") + (risk ? " risk" : "") + (delayed ? " delayed" : "") + '"><button class="scale-task-toggle" data-scale-plan-task="' + t.id + '"><span class="scale-task-check">' + (done ? "✓" : "") + '</span><div><b>0' + (i+1) + ' · ' + esc(t.owner) + '</b><strong>' + esc(t.title) + '</strong><p>Success · ' + esc(t.success) + '</p></div></button><div class="scale-task-actions"><span>' + (delayed ? "已延期" : (risk ? "有风险" : "正常")) + '</span><button data-scale-task-risk="' + t.id + '" ' + (done ? "disabled" : "") + '>' + (risk ? "取消风险" : "标记风险") + '</button></div></article>';
     }).join("");
 
     var hospitals = plan.hospitals.map(function(h){
@@ -3159,21 +3166,16 @@
       return '<button class="scale-data-item ' + (done ? "done" : "") + '" data-scale-plan-task="' + id + '"><span>' + (done ? "✓" : "") + '</span><p>' + esc(item) + '</p></button>';
     }).join("");
 
-    var gates = plan.gates.map(function(g){
-      var phaseId = g.id === "g30" ? "d30" : (g.id === "g60" ? "d60" : "d90");
-      var gp = scalePlanPhaseProgress(plan,phaseId);
-      var passed = gp.pct === 100;
-      return '<div class="execution-gate ' + (passed ? "passed" : "") + '"><div><span>' + esc(g.day) + '</span><strong>' + esc(g.title) + '</strong></div><p>' + esc(g.question) + '</p><small>' + esc(g.pass) + '</small><b>' + gp.pct + '%</b></div>';
-    }).join("");
-
     return '<div class="scale-plan-page">' +
       '<div class="scale-plan-toolbar"><button class="btn ghost" data-route-jump="pilot">返回 Scale Gate</button><div><button class="btn soft" data-scale-plan-regenerate>重新生成计划</button><button class="btn primary" data-scale-plan-executive>Executive Brief</button></div></div>' +
       '<header class="scale-plan-cover"><div><span>SCALE EXECUTION PLAN · 30 / 60 / 90 DAYS</span><h1>' + esc(plan.target) + ' · ' + esc(plan.scope) + '</h1><p>' + esc(plan.decisionLabel) + ' 已转化为可执行复制计划. 每个阶段必须通过管理 Gate, 不以“部署完成”代替业务验证.</p></div><div class="scale-plan-cover-meta"><strong>' + overall.pct + '%</strong><span>总执行进度</span><small>' + overall.done + '/' + overall.total + ' 项完成</small></div></header>' +
-      '<section class="scale-plan-summary"><div><span>目标区域</span><strong>' + esc(plan.target) + '</strong><small>相似度 ' + plan.similarity + '%</small></div><div><span>首批医院</span><strong>' + plan.hospitals.length + '</strong><small>只复制高相似场景</small></div><div><span>首批代表</span><strong>' + plan.reps.length + '</strong><small>先做能力基线</small></div><div><span>复制 Agent</span><strong>' + plan.agents.length + '</strong><small>按阶段启用</small></div><div><span>数据准备</span><strong>' + plan.dataReadiness + '%</strong><small>当前目标区基线</small></div></section>' +
+      '<section class="scale-plan-summary"><div><span>目标区域</span><strong>' + esc(plan.target) + '</strong><small>相似度 ' + plan.similarity + '%</small></div><div><span>首批医院</span><strong>' + plan.hospitals.length + '</strong><small>只复制高相似场景</small></div><div><span>首批代表</span><strong>' + plan.reps.length + '</strong><small>先做能力基线</small></div><div><span>复制 Agent</span><strong>' + plan.agents.length + '</strong><small>按阶段启用</small></div><div><span>模拟执行日</span><strong>Day ' + state.scaleExecutionDay + '</strong><small>计划 vs 实际动态计算</small></div></section>' +
+      renderScaleExecutionCockpit(plan) +
       '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>01</span><div><h2>30 / 60 / 90 天执行路线</h2><p>阶段目标固定, 任务完成状态保存在当前浏览器.</p></div></div><div class="scale-phase-tabs">' + phaseTabs + '</div><div class="scale-phase-body"><div class="scale-phase-header"><div><span>' + esc(phase.gate) + '</span><h3>' + esc(phase.title) + '</h3><p>' + esc(phase.objective) + '</p></div><div><strong>' + phaseProgress.pct + '%</strong><span>' + phaseProgress.done + '/' + phaseProgress.total + '</span></div></div><div class="scale-plan-task-list">' + tasks + '</div><div class="scale-phase-success"><span>PHASE SUCCESS</span><strong>' + esc(phase.success) + '</strong></div></div></section>' +
       '<section class="scale-plan-grid"><div class="scale-plan-section"><div class="scale-plan-section-title"><span>02</span><div><h2>首批目标医院</h2><p>先复制最相似场景, 不做全面铺开.</p></div></div><div class="scale-plan-hospitals">' + hospitals + '</div></div><div class="scale-plan-section"><div class="scale-plan-section-title"><span>03</span><div><h2>首批代表</h2><p>上线前先建立能力基线和训练重点.</p></div></div><div class="scale-plan-reps">' + reps + '</div></div></section>' +
+      renderSecondWave(plan) +
       '<section class="scale-plan-grid"><div class="scale-plan-section"><div class="scale-plan-section-title"><span>04</span><div><h2>Agent 复制顺序</h2><p>先复制行动闭环, 再复制管理与学习能力.</p></div></div><div class="scale-plan-agents">' + agents + '</div></div><div class="scale-plan-section"><div class="scale-plan-section-title"><span>05</span><div><h2>数据准备清单</h2><p>数据不齐时不强行复制模型.</p></div></div><div class="scale-data-list">' + dataItems + '</div></div></section>' +
-      '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>06</span><div><h2>Management Gates</h2><p>Day 30 / 60 / 90 三次明确管理判断.</p></div></div><div class="execution-gates">' + gates + '</div></section>' +
+      '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>06</span><div><h2>Management Gates</h2><p>Day 30 / 60 / 90 必须由经理显式做“暂缓 / 有条件通过 / 通过”判断.</p></div></div>' + renderScaleGateReviews(plan) + '</section>' +
       '<footer class="scale-plan-footer"><div><span>SCALE PRINCIPLE</span><strong>复制的是可验证的行动与管理闭环, 不是把软件菜单搬到另一个区域.</strong></div><div><span>PLAN ID</span><strong>' + esc(plan.id) + '</strong></div></footer>' +
     '</div>';
   }
@@ -3205,6 +3207,9 @@
     if (key === "hold") {
       state.scaleExecutionPlan = null;
       state.scaleExecutionChecks = {};
+      state.scaleExecutionRisks = {};
+      state.scaleExecutionGateReviews = {};
+      state.scaleExecutionDay = 18;
     } else {
       state.scaleExecutionPlan = createScaleExecutionPlan(snapshot);
       state.scaleExecutionChecks = {};
@@ -3985,6 +3990,30 @@
         saveState();
         render();
         window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-scale-day]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var delta = Number(el.getAttribute("data-scale-day") || 0);
+        state.scaleExecutionDay = Math.max(1,Math.min(90,Number(state.scaleExecutionDay || 1) + delta));
+        saveState();
+        render();
+      });
+    });
+
+    $$("[data-scale-task-risk]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var id = el.getAttribute("data-scale-task-risk");
+        state.scaleExecutionRisks[id] = !state.scaleExecutionRisks[id];
+        saveState();
+        render();
+      });
+    });
+
+    $$("[data-scale-gate-review]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        reviewScaleExecutionGate(el.getAttribute("data-scale-gate-review"), el.getAttribute("data-scale-gate-status"));
       });
     });
 
