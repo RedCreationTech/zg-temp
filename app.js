@@ -4307,7 +4307,9 @@
 
     if (state.scalePortfolioReview) {
       var reviewAt=Date.parse(state.scalePortfolioReview.generatedAt || 0);
+      var staleTypes=["wave","pace","resource","pattern","candidate","what-if","scale"];
       var newestDecisionAt=(state.rolloutDecisionLog || []).reduce(function(max,item){
+        if (staleTypes.indexOf(String(item.type || "").toLowerCase())<0) return max;
         var t=Date.parse(item.at || 0);
         return Math.max(max,isNaN(t)?0:t);
       },0);
