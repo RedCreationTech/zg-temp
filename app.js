@@ -366,7 +366,7 @@
     var items = [
       { role: "地区经理", agent: "Hospital Agent", action: "确定医院 Top 杠杆点", status: "done", route: "hospital" },
       { role: "医药代表", agent: "Doctor Agent", action: "生成医生下一次行动", status: "active", route: "doctor" },
-      { role: "地区经理", agent: "Coaching Agent", action: "修复下一次拜访打法", status: "next", route: "coaching" },
+      { role: "地区经理", agent: "Coaching Agent", action: "先定位团队高优先辅导对象", status: "next", route: "teamcoaching" },
       { role: "销售总监", agent: "Decision Cockpit", action: "加资源 / 纠偏 / 升级", status: "next", route: "cockpit" }
     ];
     var html = items.map(function (item, i) {
@@ -514,7 +514,7 @@
       insightSecondary = '<div class="insight-card"><div class="insight-head"><strong>本周只修一个动作</strong><span class="insight-tag">Manager Focus</span></div><p>把“好的, 下次再来”替换成一个明确请求: 下次住院组讨论中共同判断 1 例边界患者, 并约定具体时间.</p><button class="tiny-btn" data-route-jump="coaching">查看关键句替换</button></div>';
     } else {
       insightPrimary = '<div class="insight-card"><div class="insight-head"><strong>医院机会变化</strong><span class="insight-tag">Hospital Agent</span></div><p>华东附一的机会不在增加拜访频次, 而在周三 MDT 的方案选择节点. 建议把资源从泛化覆盖切换到场景证据.</p><button class="tiny-btn primary" data-route-jump="hospital">查看医院作战</button></div>';
-      insightSecondary = '<div class="insight-card"><div class="insight-head"><strong>需要立即辅导</strong><span class="insight-tag">Coaching</span></div><p>张蕾本次拜访探询质量仅 54 分. 下一次拜访前建议完成一次经理角色演练, 替换开场与关键问题.</p><button class="tiny-btn" data-route-jump="coaching">进入辅导</button></div>';
+      insightSecondary = '<div class="insight-card"><div class="insight-head"><strong>需要立即辅导</strong><span class="insight-tag">Coaching</span></div><p>张蕾本次拜访探询质量仅 54 分. 下一次拜访前建议完成一次经理角色演练, 替换开场与关键问题.</p><button class="tiny-btn" data-route-jump="teamcoaching">查看团队辅导</button></div>';
     }
 
     var insights =
