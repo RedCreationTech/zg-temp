@@ -2770,7 +2770,9 @@
         hospitals:[
           { id:"e2-h1", name:"华东二区中心医院", tier:"A", focus:"复制 MDT 场景推进", readiness:92 },
           { id:"e2-h2", name:"城东大学附属医院", tier:"A", focus:"复制患者识别 → 病例共识", readiness:86 },
-          { id:"e2-h3", name:"新城人民医院", tier:"B", focus:"验证 Hospital Agent 杠杆识别", readiness:78 }
+          { id:"e2-h3", name:"新城人民医院", tier:"B", focus:"验证 Hospital Agent 杠杆识别", readiness:78 },
+          { id:"e2-h4", name:"东港人民医院", tier:"B", focus:"第二批复制病例会推进", readiness:75 },
+          { id:"e2-h5", name:"滨海中心医院", tier:"B", focus:"第二批验证 Champion Pattern", readiness:72 }
         ],
         reps:[
           { id:"e2-r1", name:"陈宇", role:"首批代表", baseline:74, focus:"探询 + Evidence 匹配" },
@@ -2784,25 +2786,32 @@
         hospitals:[
           { id:"c1-h1", name:"华中一区中心医院", tier:"A", focus:"先建立患者识别 Context", readiness:78 },
           { id:"c1-h2", name:"江城大学附属医院", tier:"A", focus:"验证 Doctor NBA", readiness:73 },
-          { id:"c1-h3", name:"新区人民医院", tier:"B", focus:"验证 Coaching 闭环", readiness:65 }
+          { id:"c1-h3", name:"新区人民医院", tier:"B", focus:"验证 Coaching 闭环", readiness:65 },
+          { id:"c1-h4", name:"江北中心医院", tier:"B", focus:"第二批验证 Weekly Review", readiness:63 },
+          { id:"c1-h5", name:"华中协同医院", tier:"B", focus:"第二批验证 Team Playbook", readiness:60 }
         ],
         reps:[
           { id:"c1-r1", name:"李辰", role:"首批代表", baseline:71, focus:"Context 探询" },
           { id:"c1-r2", name:"韩雪", role:"首批代表", baseline:68, focus:"Evidence 匹配" },
           { id:"c1-r3", name:"宋扬", role:"首批代表", baseline:73, focus:"下一步承诺" },
-          { id:"c1-r4", name:"顾琳", role:"第二批代表", baseline:70, focus:"经理 Coaching" }
+          { id:"c1-r4", name:"顾琳", role:"第二批代表", baseline:70, focus:"经理 Coaching" },
+          { id:"c1-r5", name:"杨帆", role:"第二批代表", baseline:69, focus:"Outcome → Review 闭环" }
         ]
       },
       southcore:{
         hospitals:[
           { id:"sc-h1", name:"华南核心医院 A", tier:"A", focus:"先验证医院策略模型适配", readiness:66 },
           { id:"sc-h2", name:"华南核心医院 B", tier:"A", focus:"先补主数据和影响者地图", readiness:61 },
-          { id:"sc-h3", name:"华南核心医院 C", tier:"B", focus:"观察区, 暂不进入完整闭环", readiness:55 }
+          { id:"sc-h3", name:"华南核心医院 C", tier:"B", focus:"观察区, 暂不进入完整闭环", readiness:55 },
+          { id:"sc-h4", name:"华南核心医院 D", tier:"B", focus:"第二批主数据验证", readiness:52 },
+          { id:"sc-h5", name:"华南核心医院 E", tier:"C", focus:"第二批观察与信息采集", readiness:49 }
         ],
         reps:[
           { id:"sc-r1", name:"代表 A", role:"首批代表", baseline:68, focus:"基础 Context" },
           { id:"sc-r2", name:"代表 B", role:"首批代表", baseline:66, focus:"拜访目标" },
-          { id:"sc-r3", name:"代表 C", role:"第二批代表", baseline:70, focus:"Outcome 记录" }
+          { id:"sc-r3", name:"代表 C", role:"首批代表", baseline:70, focus:"Outcome 记录" },
+          { id:"sc-r4", name:"代表 D", role:"第二批代表", baseline:67, focus:"经理 Coaching" },
+          { id:"sc-r5", name:"代表 E", role:"第二批代表", baseline:65, focus:"医院策略 → Action" }
         ]
       }
     };
@@ -2815,7 +2824,7 @@
     var profile = scaleTargetProfile(targetMeta.id);
     var isConditional = decisionSnapshot.decision === "conditional";
     var hospitalCount = isConditional ? 2 : 3;
-    var repCount = isConditional ? 3 : Math.min(5,profile.reps.length);
+    var repCount = Math.min(3,profile.reps.length);
     var hospitals = profile.hospitals.slice(0,hospitalCount);
     var reps = profile.reps.slice(0,repCount);
 
