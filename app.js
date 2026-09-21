@@ -15,6 +15,7 @@
     weeklybrief: "Weekly Decision Brief",
     scaleplan: "Scale Execution Plan",
     portfolio: "Scale Portfolio",
+    controltower: "National Rollout Control Tower",
     coaching: "拜访辅导",
     cockpit: "总监驾驶舱",
     pilot: "Pilot 运营",
@@ -124,6 +125,11 @@
     scalePortfolioPace: saved.scalePortfolioPace || {},
     scalePortfolioScenario: saved.scalePortfolioScenario || "balanced",
     scalePortfolioReview: saved.scalePortfolioReview || null,
+    rolloutAlertStates: saved.rolloutAlertStates || {},
+    rolloutDecisionLog: saved.rolloutDecisionLog || [],
+    rolloutWhatIfScenario: saved.rolloutWhatIfScenario || "pause-region",
+    rolloutWhatIfRegion: saved.rolloutWhatIfRegion || "east2",
+    rolloutDrill: saved.rolloutDrill || { regionId:"pilot-east1", hospitalId:null, doctorId:null },
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -198,6 +204,11 @@
       scalePortfolioPace: state.scalePortfolioPace,
       scalePortfolioScenario: state.scalePortfolioScenario,
       scalePortfolioReview: state.scalePortfolioReview,
+      rolloutAlertStates: state.rolloutAlertStates,
+      rolloutDecisionLog: state.rolloutDecisionLog,
+      rolloutWhatIfScenario: state.rolloutWhatIfScenario,
+      rolloutWhatIfRegion: state.rolloutWhatIfRegion,
+      rolloutDrill: state.rolloutDrill,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -3767,9 +3778,11 @@
     if (!state.scalePortfolioResourcePlan) state.scalePortfolioResourcePlan = {};
     if (state.scalePortfolioResourcePlan[resourceId] === regionId) {
       delete state.scalePortfolioResourcePlan[resourceId];
+      pushRolloutDecision("resource","取消共享资源预留 · " + resourceId,"已取消原资源预留.",{resourceId:resourceId});
       showToast("已取消资源预留");
     } else {
       state.scalePortfolioResourcePlan[resourceId] = regionId;
+      pushRolloutDecision("resource","预留共享资源 · " + resourceId,"资源预留给 " + regionId + ".",{resourceId:resourceId,regionId:regionId});
       showToast("已预留 " + (portfolioResourceDefinitions().find(function(x){return x.id===resourceId;}) || {}).name);
     }
     saveState();
@@ -3899,6 +3912,7 @@
     var next = Math.max(1,Math.min(3,current + Number(delta || 0)));
     if (!state.scalePortfolioWaveOverrides) state.scalePortfolioWaveOverrides = {};
     state.scalePortfolioWaveOverrides[regionId] = "w" + next;
+    pushRolloutDecision("wave","调整 Wave · " + regionId,"区域移动到 Wave " + next + ".",{regionId:regionId,wave:"w"+next});
     saveState();
     render();
     showToast("已移动到 Wave " + next);
@@ -3914,6 +3928,7 @@
     if (!state.scalePortfolioPace) state.scalePortfolioPace = {};
     if (!state.scalePortfolioWaveOverrides) state.scalePortfolioWaveOverrides = {};
     state.scalePortfolioPace[regionId] = pace;
+    pushRolloutDecision("pace","调整区域节奏 · " + regionId,"总部节奏更新为 " + portfolioPaceMeta(pace).label + ".",{regionId:regionId,pace:pace});
     if (regionId !== active && pace === "accelerate") {
       var regions = scalePortfolioRegions();
       var map = portfolioWaveMap(regions);
@@ -4044,6 +4059,7 @@
 
   function generatePortfolioExecutiveReview() {
     state.scalePortfolioReview = buildPortfolioExecutiveReview(scalePortfolioRegions());
+    pushRolloutDecision("review","生成 Portfolio Executive Review","季度总部 Review 快照已生成.",{reviewId:state.scalePortfolioReview.id});
     saveState();
     render();
     showToast("季度 Portfolio Executive Review 已生成");
@@ -4123,6 +4139,482 @@
     '</div>';
   }
 
+  function pushRolloutDecision(type,title,detail,meta) {
+    if (!state.rolloutDecisionLog) state.rolloutDecisionLog = [];
+    state.rolloutDecisionLog.unshift({
+      id:"hq-" + Date.now() + "-" + Math.floor(Math.random()*1000),
+      type:type || "decision",
+      title:title || "总部决策",
+      detail:detail || "",
+      actor:state.session && state.session.name ? state.session.name : "总部管理层",
+      at:new Date().toISOString(),
+      meta:meta || {}
+    });
+    state.rolloutDecisionLog = state.rolloutDecisionLog.slice(0,30);
+  }
+
+  function rolloutAlertState(id) {
+    return (state.rolloutAlertStates || {})[id] || "open";
+  }
+
+  function updateRolloutAlert(id,status,title) {
+    if (!state.rolloutAlertStates) state.rolloutAlertStates = {};
+    state.rolloutAlertStates[id] = status;
+    pushRolloutDecision(
+      "alert",
+      (status === "escalated" ? "升级异常" : (status === "resolved" ? "关闭异常" : "确认异常")) + " · " + title,
+      "Control Tower 异常状态更新为 " + status + ".",
+      { alertId:id,status:status }
+    );
+    saveState();
+    render();
+    showToast(status === "escalated" ? "异常已升级总部" : (status === "resolved" ? "异常已关闭" : "异常已确认"));
+  }
+
+  function rolloutAlerts() {
+    var regions = scalePortfolioRegions();
+    var alerts = [];
+    var waveDefs = portfolioWaveDefinitions();
+    waveDefs.forEach(function(w){
+      var s = portfolioWaveSummary(regions,w.id);
+      if (s.budgetOver || s.parallelOver) {
+        alerts.push({
+          id:"wave-" + w.id,
+          severity:"high",
+          title:w.quarter + " Wave 容量超限",
+          detail:"当前 " + s.budget + "/" + s.capacity + " 资源点, 并行 " + s.running + "/" + s.parallel + ".",
+          owner:"销售卓越 / 区域管理",
+          source:"Wave Planning",
+          action:"移动区域或降低并行节奏"
+        });
+      }
+    });
+
+    portfolioResourceConflicts().forEach(function(r){
+      alerts.push({
+        id:"resource-" + r.id,
+        severity:"high",
+        title:r.name + " 共享资源冲突",
+        detail:"当前使用 " + portfolioResourceUsage(r.id) + "/" + r.capacity + ", 已超过总部共享容量.",
+        owner:"总部资源 Owner",
+        source:"Shared Resource",
+        action:"取消预留、调整 Wave 或升级资源"
+      });
+    });
+
+    if (state.scaleExecutionPlan) {
+      var risks = scaleExecutionRiskRegister(state.scaleExecutionPlan);
+      if (risks.length) {
+        alerts.push({
+          id:"active-scale-risk",
+          severity:risks.some(function(r){return r.severity==="高";}) ? "high" : "medium",
+          title:state.scaleExecutionPlan.target + " 存在 " + risks.length + " 个执行风险 / 延期",
+          detail:risks.slice(0,2).map(function(r){return r.title;}).join(" / "),
+          owner:"当前 Scale Owners",
+          source:"90-Day Execution",
+          action:"进入执行计划完成恢复动作"
+        });
+      }
+
+      var recoveryTotal=0, recoveryCommitted=0;
+      Object.keys(state.scaleRecoveryPlans || {}).forEach(function(key){
+        var rows=state.scaleRecoveryPlans[key] || [];
+        recoveryTotal += rows.length;
+        recoveryCommitted += rows.filter(function(x){return x.committed;}).length;
+      });
+      if (recoveryTotal && recoveryCommitted < recoveryTotal) {
+        alerts.push({
+          id:"recovery-commitment",
+          severity:"medium",
+          title:"恢复计划 Owner 承诺未完成",
+          detail:"当前 " + recoveryCommitted + "/" + recoveryTotal + " 项恢复动作已明确承诺.",
+          owner:"Gate Review Owners",
+          source:"Recovery Plan",
+          action:"补齐 Owner Commitment"
+        });
+      }
+
+      var g30=state.scaleExecutionGateReviews.g30;
+      var g60=state.scaleExecutionGateReviews.g60;
+      var day=Number(state.scaleExecutionDay || 1);
+      if (day >= 60 && g30 && g30.status !== "hold" && !scaleEvidenceStatus("value").requiredPassed) {
+        alerts.push({
+          id:"value-evidence-due",
+          severity:"high",
+          title:"Day 60 Value Evidence 尚未闭环",
+          detail:"模拟执行日已到 Day " + day + ", 但必选 Value Evidence 仅 " + scaleEvidenceStatus("value").requiredDone + "/" + scaleEvidenceStatus("value").requiredTotal + ".",
+          owner:"区域负责人 / 销售卓越",
+          source:"Value Gate",
+          action:"完成 NBA / Action / Outcome 证据验证"
+        });
+      }
+      if (day >= 90 && g60 && g60.status !== "hold" && !scaleEvidenceStatus("repeatability").requiredPassed) {
+        alerts.push({
+          id:"repeatability-evidence-due",
+          severity:"high",
+          title:"Day 90 Repeatability Evidence 尚未闭环",
+          detail:"复制证据仅 " + scaleEvidenceStatus("repeatability").requiredDone + "/" + scaleEvidenceStatus("repeatability").requiredTotal + " 个必选项通过.",
+          owner:"Learning Engine / 管理层",
+          source:"Scale Review",
+          action:"完成 Pattern / Rule / Management Closure"
+        });
+      }
+    }
+
+    var active=regions.find(function(r){return r.type==="active";});
+    if (active && portfolioRegionPace(active.id)==="pause") {
+      alerts.push({
+        id:"active-region-paused",
+        severity:"medium",
+        title:active.name + " 在总部组合层被标记暂停",
+        detail:"90 天正式执行计划仍然存在. Portfolio 暂停不会自动修改正式 Gate.",
+        owner:"销售总监",
+        source:"Portfolio Pace",
+        action:"回到 90 天 Gate 决定是否正式暂缓"
+      });
+    }
+
+    var map=portfolioWaveMap(regions);
+    regions.filter(function(r){return r.type==="candidate" && map[r.id]==="w1" && r.data<80;}).forEach(function(r){
+      alerts.push({
+        id:"candidate-readiness-" + r.id,
+        severity:"medium",
+        title:r.name + " 准备度不足但已排入 Wave 1",
+        detail:"Data Readiness " + r.data + "%. 进入当前季度准备可能挤占共享资源.",
+        owner:"区域准备 Owner",
+        source:"Wave Planning",
+        action:"后移 Wave 或先补数据"
+      });
+    });
+
+    if (state.scalePortfolioReview && state.scalePortfolioReview.scenarioKey !== state.scalePortfolioScenario) {
+      alerts.push({
+        id:"review-stale",
+        severity:"low",
+        title:"季度 Executive Review 已过期",
+        detail:"当前情景已从 " + esc(state.scalePortfolioReview.scenario || "-") + " 切换, Review 快照仍是旧情景.",
+        owner:"销售总监",
+        source:"Portfolio Review",
+        action:"刷新季度 Review"
+      });
+    }
+
+    return alerts;
+  }
+
+  function rolloutDependencies() {
+    var regions=scalePortfolioRegions();
+    var waveRisk=portfolioWaveDefinitions().some(function(w){
+      var s=portfolioWaveSummary(regions,w.id);
+      return s.budgetOver || s.parallelOver;
+    });
+    var g30=state.scaleExecutionGateReviews.g30;
+    var g60=state.scaleExecutionGateReviews.g60;
+    var g90=state.scaleExecutionGateReviews.g90;
+    var scaleDecision=state.scaleGateDecision;
+    return [
+      {
+        id:"dep-scale-decision",
+        title:"Pilot Proof → 正式扩区",
+        passed:!!(scaleDecision && scaleDecision.decision !== "hold"),
+        note:"必须先有正式 Scale Decision, 才能进入 90 天执行.",
+        next:"Pilot Scale Gate"
+      },
+      {
+        id:"dep-launch-value",
+        title:"Launch Gate → Value 验证",
+        passed:!!(g30 && g30.status !== "hold"),
+        note:"Day 30 未通过时, 第二批和 Value Evidence 不应继续推进.",
+        next:"Day 30 Launch Gate"
+      },
+      {
+        id:"dep-value-repeat",
+        title:"Value Gate → Repeatability",
+        passed:!!(g60 && g60.status !== "hold"),
+        note:"先证明客户行为改变, 再验证 Champion Pattern 复制.",
+        next:"Day 60 Value Gate"
+      },
+      {
+        id:"dep-repeat-next",
+        title:"Scale Review → 下一轮正式扩区",
+        passed:!!(g90 && g90.status !== "hold"),
+        note:"下一地区真正启动前, 当前扩区应完成 Repeatability Review.",
+        next:"Day 90 Scale Review"
+      },
+      {
+        id:"dep-capacity",
+        title:"总部容量 → 并行 Rollout",
+        passed:!waveRisk && portfolioResourceConflicts().length===0,
+        note:"预算 Wave 与共享资源都在容量内, 才适合继续提高并行度.",
+        next:"Wave / Resource Planning"
+      }
+    ];
+  }
+
+  function rolloutWhatIfOptions() {
+    return [
+      { id:"pause-region", label:"暂停一个区域", note:"模拟释放当前 Wave 资源, 同时观察进度和 Gate 风险." },
+      { id:"accelerate-region", label:"加速候选区域", note:"模拟候选区域提前一 Wave 并提高资源投入." },
+      { id:"budget-cut", label:"预算容量 -20%", note:"模拟总部预算收紧对三个 Wave 的影响." },
+      { id:"budget-add", label:"预算容量 +20%", note:"模拟追加资源后是否能安全提高并行度." }
+    ];
+  }
+
+  function rolloutWhatIfResult() {
+    var regions=scalePortfolioRegions();
+    var scenario=portfolioScenarioMeta(state.scalePortfolioScenario);
+    var selected=regions.find(function(r){return r.id===state.rolloutWhatIfRegion;})
+      || regions.find(function(r){return r.type==="active";})
+      || portfolioCandidateRanking(regions)[0]
+      || regions[0];
+    var waveMap=portfolioWaveMap(regions);
+    var waveId=waveMap[selected.id] || "w1";
+    var wave=portfolioWaveDefinitions().find(function(w){return w.id===waveId;}) || portfolioWaveDefinitions()[0];
+    var summary=portfolioWaveSummary(regions,wave.id);
+    var kind=state.rolloutWhatIfScenario || "pause-region";
+    var currentBudget=portfolioRegionBudget(selected);
+    var currentFactor=portfolioPaceMeta(portfolioRegionPace(selected.id)).factor || 1;
+    var baseBudget=Math.max(1,Math.round(currentBudget/currentFactor));
+    var result={
+      kind:kind,
+      region:selected,
+      headline:"",
+      impact:[],
+      risk:"low",
+      applyLabel:null
+    };
+
+    if (kind==="pause-region") {
+      var pausedBudget=Math.round(baseBudget*.3);
+      var after=Math.max(0,summary.budget-currentBudget+pausedBudget);
+      result.headline="暂停 " + selected.name + " 后, " + wave.quarter + " 预计释放 " + Math.max(0,currentBudget-pausedBudget) + " 个资源点.";
+      result.impact=[
+        "Wave 资源: " + summary.budget + " → " + after,
+        "并行区域: " + summary.running + " → " + Math.max(0,summary.running-(portfolioRegionPace(selected.id)==="pause"?0:1)),
+        selected.type==="active" ? "风险: 正式 90 天计划不会自动暂停, 必须回到 Management Gate" : "候选区域准备活动暂停, 不改变正式 Scale Gate"
+      ];
+      result.risk=selected.type==="active" ? "high" : "medium";
+      result.applyLabel="应用“暂停”到 Portfolio";
+    } else if (kind==="accelerate-region") {
+      var accelerated=Math.round(baseBudget*1.15);
+      var currentNo=portfolioWaveNumber(waveId);
+      var targetNo=Math.max(1,currentNo-1);
+      var targetId="w"+targetNo;
+      var targetWave=portfolioWaveDefinitions().find(function(w){return w.id===targetId;}) || wave;
+      var targetSummary=portfolioWaveSummary(regions,targetId);
+      var afterBudget=targetSummary.budget + (targetId===waveId ? accelerated-currentBudget : accelerated);
+      var afterParallel=targetSummary.running + (targetId===waveId ? 0 : 1);
+      result.headline="加速 " + selected.name + " 将进入 " + targetWave.quarter + ", 需要额外占用约 " + Math.max(0,accelerated-currentBudget) + " 个资源点.";
+      result.impact=[
+        targetWave.quarter + " 资源: " + targetSummary.budget + " → " + afterBudget + " / " + scenario.budget,
+        "并行区域: " + targetSummary.running + " → " + afterParallel + " / " + scenario.parallel,
+        selected.data<80 ? "风险: Data Readiness 仅 " + selected.data + "%, 提前可能造成返工" : "数据准备度已达到 80% 以上"
+      ];
+      result.risk=(afterBudget>scenario.budget || afterParallel>scenario.parallel || selected.data<80) ? "high" : "medium";
+      result.applyLabel=selected.id==="pilot-east1" ? null : "应用“加速”到 Portfolio";
+    } else {
+      var multiplier=kind==="budget-cut" ? .8 : 1.2;
+      var capacity=Math.round(scenario.budget*multiplier);
+      var beforeOver=0, afterOver=0;
+      portfolioWaveDefinitions().forEach(function(w){
+        var s=portfolioWaveSummary(regions,w.id);
+        if (s.budget>s.capacity) beforeOver += 1;
+        if (s.budget>capacity) afterOver += 1;
+      });
+      result.headline=(kind==="budget-cut" ? "预算容量减少 20%" : "预算容量增加 20%") + " 后, 每个 Wave 容量变为 " + capacity + " 资源点.";
+      result.impact=[
+        "超预算 Wave 数: " + beforeOver + " → " + afterOver,
+        "并行上限仍保持 " + scenario.parallel + " 个区域",
+        kind==="budget-cut" ? "需要优先保护正式扩区与高分候选, 其余区域后移" : "新增预算不会替代 Scale Gate, 仍需逐区证明 Value"
+      ];
+      result.risk=afterOver>0 ? "high" : "low";
+      result.applyLabel=kind==="budget-cut" ? "切换到稳健情景" : "切换到加速情景";
+    }
+    return result;
+  }
+
+  function applyRolloutWhatIf() {
+    var result=rolloutWhatIfResult();
+    if (!result.applyLabel) return;
+    if (result.kind==="pause-region") {
+      setPortfolioPace(result.region.id,"pause");
+    } else if (result.kind==="accelerate-region") {
+      setPortfolioPace(result.region.id,"accelerate");
+    } else if (result.kind==="budget-cut") {
+      state.scalePortfolioScenario="conservative";
+      pushRolloutDecision("what-if","采用稳健预算情景","What-if 模拟后切换到稳健情景.",{scenario:"conservative"});
+      saveState(); render();
+    } else if (result.kind==="budget-add") {
+      state.scalePortfolioScenario="accelerated";
+      pushRolloutDecision("what-if","采用加速预算情景","What-if 模拟后切换到加速情景.",{scenario:"accelerated"});
+      saveState(); render();
+    }
+    pushRolloutDecision("what-if","应用 What-if 策略 · " + result.region.name,result.headline,{kind:result.kind,regionId:result.region.id});
+    saveState();
+    render();
+    showToast("What-if 策略已应用到 Portfolio");
+  }
+
+  function saveRolloutWhatIfDraft() {
+    var result=rolloutWhatIfResult();
+    pushRolloutDecision("draft","What-if 决策草案 · " + result.region.name,result.headline + " " + result.impact.join(" | "),{kind:result.kind,regionId:result.region.id,draft:true});
+    saveState();
+    render();
+    showToast("What-if 已记录为决策草案");
+  }
+
+  function rolloutDecisionHistory() {
+    var history=(state.rolloutDecisionLog || []).slice();
+    (state.scaleGateHistory || []).forEach(function(item){
+      history.push({
+        id:"scale-history-" + item.id,
+        type:"scale",
+        title:"Scale Decision · " + item.label,
+        detail:(item.target || "当前区域") + " · Gate " + item.overall + "% · W" + item.pilotWeek,
+        actor:"管理层",
+        at:item.at || "",
+        meta:{}
+      });
+    });
+    (state.managementHistory || []).slice(0,6).forEach(function(item,i){
+      history.push({
+        id:"management-history-" + i,
+        type:"management",
+        title:"经营动作 · " + item.label,
+        detail:item.object + " · " + item.reason,
+        actor:item.actor || "销售总监",
+        at:item.at || "",
+        meta:{}
+      });
+    });
+    return history.sort(function(a,b){return String(b.at||"").localeCompare(String(a.at||""));}).slice(0,18);
+  }
+
+  function rolloutPilotHospitalActions(hospitalId) {
+    var map={
+      h1:["a1","a2","a3","a7"],
+      h2:["a4","a6"],
+      h3:["a5"]
+    };
+    var ids=map[hospitalId] || [];
+    return (data.actions || []).filter(function(a){return ids.indexOf(a.id)>=0;});
+  }
+
+  function rolloutDrillRegion() {
+    var regions=scalePortfolioRegions();
+    return regions.find(function(r){return r.id===(state.rolloutDrill && state.rolloutDrill.regionId);}) || regions[0];
+  }
+
+  function rolloutDrillHospitals(region) {
+    if (!region) return [];
+    if (region.id==="pilot-east1") return (data.hospitals || []).map(function(h){
+      return { id:h.id,name:h.name,focus:h.target,readiness:h.progress,source:"pilot",raw:h };
+    });
+    var profile=scaleTargetProfile(region.id);
+    return (profile.hospitals || []).map(function(h){
+      return { id:h.id,name:h.name,focus:h.focus,readiness:h.readiness,source:"scale",raw:h };
+    });
+  }
+
+  function renderRolloutDrilldown() {
+    var regions=scalePortfolioRegions();
+    if (!state.rolloutDrill) state.rolloutDrill={regionId:"pilot-east1",hospitalId:null,doctorId:null};
+    var region=rolloutDrillRegion();
+    var hospitals=rolloutDrillHospitals(region);
+    var hospital=hospitals.find(function(h){return h.id===state.rolloutDrill.hospitalId;}) || null;
+    var doctor=null;
+    if (hospital && hospital.source==="pilot") {
+      doctor=(data.doctors || []).find(function(d){return d.id===state.rolloutDrill.doctorId;}) || null;
+    }
+
+    var crumbs='<button data-rollout-drill-reset>全国</button><span>›</span><button data-rollout-drill-region="' + region.id + '">' + esc(region.name) + '</button>';
+    if (hospital) crumbs += '<span>›</span><button data-rollout-drill-hospital="' + hospital.id + '">' + esc(hospital.name) + '</button>';
+    if (doctor) crumbs += '<span>›</span><b>' + esc(doctor.name) + '</b>';
+
+    var body="";
+    if (doctor) {
+      var actions=rolloutPilotHospitalActions(hospital.id).filter(function(a){return a.entity.indexOf(doctor.name)>=0;});
+      var visits=(data.visits || []).filter(function(v){return v.doctor===doctor.name;});
+      body='<div class="tower-drill-detail"><div class="tower-drill-head"><div><span>DOCTOR</span><h3>' + esc(doctor.name) + ' · ' + esc(doctor.department) + '</h3><p>' + esc(doctor.gap) + '</p></div><button class="tiny-btn" data-rollout-open-doctor="' + doctor.id + '">进入 Doctor Agent</button></div>' +
+        '<div class="tower-drill-columns"><div><span>ACTIONS</span>' + (actions.length ? actions.map(function(a){
+          var st=getActionStatus(a);
+          return '<div class="tower-action-row"><div><strong>' + esc(a.title) + '</strong><small>' + esc(a.owner) + ' · ' + esc(a.due) + '</small></div><b class="' + st + '">' + esc(statusLabel(st)) + '</b></div>';
+        }).join("") : '<div class="brief-muted">当前没有直接绑定该医生的 Action.</div>') + '</div><div><span>OUTCOME / VISIT SIGNAL</span>' + (visits.length ? visits.map(function(v){
+          return '<div class="tower-outcome-row"><strong>' + esc(v.result) + ' · ' + v.score + '</strong><p>' + esc(v.summary) + '</p><small>' + esc(v.time) + '</small></div>';
+        }).join("") : '<div class="brief-muted">当前还没有拜访 Outcome.</div>') + '</div></div></div>';
+    } else if (hospital) {
+      if (hospital.source==="pilot") {
+        var doctors=(data.doctors || []).filter(function(d){return d.hospital===hospital.name;});
+        var hActions=rolloutPilotHospitalActions(hospital.id);
+        body='<div class="tower-drill-detail"><div class="tower-drill-head"><div><span>HOSPITAL</span><h3>' + esc(hospital.name) + '</h3><p>' + esc(hospital.focus) + '</p></div><button class="tiny-btn" data-rollout-open-hospital="' + hospital.id + '">进入 Hospital Agent</button></div><div class="tower-drill-summary"><div><span>医生</span><strong>' + doctors.length + '</strong></div><div><span>Actions</span><strong>' + hActions.length + '</strong></div><div><span>医院进度</span><strong>' + hospital.readiness + '%</strong></div></div><div class="tower-drill-cards">' + doctors.map(function(d){
+          return '<button data-rollout-drill-doctor="' + d.id + '"><span>' + esc(d.stage) + '</span><strong>' + esc(d.name) + '</strong><p>' + esc(d.targetBehavior) + '</p><b>' + d.nextScore + '</b></button>';
+        }).join("") + '</div></div>';
+      } else {
+        body='<div class="tower-drill-detail"><div class="tower-drill-head"><div><span>SCALE HOSPITAL</span><h3>' + esc(hospital.name) + '</h3><p>' + esc(hospital.focus) + '</p></div><b>' + hospital.readiness + '% Ready</b></div><div class="tower-data-boundary"><strong>医生级运营数据尚未接入</strong><p>这个扩区医院当前只有 Scale Plan 中的准备度和复制目标. 为避免伪造业务结果, Control Tower 不自动生成医生、Action 或 Outcome.</p></div></div>';
+      }
+    } else {
+      body='<div class="tower-drill-detail"><div class="tower-drill-head"><div><span>REGION</span><h3>' + esc(region.name) + '</h3><p>' + esc(region.note) + '</p></div><b>' + esc(portfolioStageMeta(region.stage).label) + '</b></div><div class="tower-drill-summary"><div><span>医院</span><strong>' + hospitals.length + '</strong></div><div><span>执行</span><strong>' + region.execution + '%</strong></div><div><span>Value</span><strong>' + (region.value==null?"未验证":region.value+"%") + '</strong></div><div><span>Repeat</span><strong>' + (region.repeatability==null?"未验证":region.repeatability+"%") + '</strong></div></div><div class="tower-drill-cards">' + hospitals.map(function(h){
+        return '<button data-rollout-drill-hospital="' + h.id + '"><span>' + (h.source==="pilot"?"PILOT HOSPITAL":"SCALE HOSPITAL") + '</span><strong>' + esc(h.name) + '</strong><p>' + esc(h.focus) + '</p><b>' + h.readiness + '%</b></button>';
+      }).join("") + '</div></div>';
+    }
+
+    var regionPicker=regions.map(function(r){
+      return '<button class="' + (r.id===region.id?"active":"") + '" data-rollout-drill-region="' + r.id + '">' + esc(r.name) + '</button>';
+    }).join("");
+
+    return '<section class="tower-section"><div class="tower-section-head"><div><span>DRILL-DOWN EXPLORER</span><h2>全国 → 区域 → 医院 → 医生 → Action → Outcome</h2><p>已接入 Demo 数据的华东一区可以完整穿透. 扩区候选不虚构医生级结果.</p></div></div><div class="tower-region-picker">' + regionPicker + '</div><div class="tower-breadcrumb">' + crumbs + '</div>' + body + '</section>';
+  }
+
+  function renderRolloutWhatIf() {
+    var regions=scalePortfolioRegions().filter(function(r){return r.id!=="pilot-east1";});
+    var result=rolloutWhatIfResult();
+    var options=rolloutWhatIfOptions().map(function(o){
+      return '<button class="' + (state.rolloutWhatIfScenario===o.id?"active":"") + '" data-rollout-whatif="' + o.id + '"><strong>' + esc(o.label) + '</strong><span>' + esc(o.note) + '</span></button>';
+    }).join("");
+    var regionOptions=regions.map(function(r){
+      return '<button class="' + (state.rolloutWhatIfRegion===r.id?"active":"") + '" data-rollout-whatif-region="' + r.id + '">' + esc(r.name) + '</button>';
+    }).join("");
+    return '<section class="tower-section"><div class="tower-section-head"><div><span>WHAT-IF SIMULATOR</span><h2>如果调整一个区域或预算, 全国 Rollout 会发生什么?</h2><p>模拟不会自动改变正式 90 天 Gate. 只有点击“应用策略”才会改变 Portfolio 情景或节奏.</p></div></div><div class="tower-whatif-grid"><div><div class="tower-subtitle">SIMULATION</div><div class="tower-whatif-options">' + options + '</div><div class="tower-subtitle">TARGET REGION</div><div class="tower-region-picker compact">' + regionOptions + '</div></div><div class="tower-whatif-result ' + result.risk + '"><span>SIMULATION RESULT</span><h3>' + esc(result.headline) + '</h3><div>' + result.impact.map(function(x){return '<p>• ' + esc(x) + '</p>';}).join("") + '</div><div class="tower-whatif-actions"><button class="btn ghost" data-rollout-whatif-draft>记录决策草案</button>' + (result.applyLabel ? '<button class="btn primary" data-rollout-whatif-apply>' + esc(result.applyLabel) + '</button>' : '') + '</div></div></div></section>';
+  }
+
+  function renderRolloutDecisionLog() {
+    var rows=rolloutDecisionHistory();
+    return '<section class="tower-section"><div class="tower-section-head"><div><span>HQ DECISION LOG</span><h2>总部决策日志</h2><p>把 Scale Gate、经营动作、异常升级和 What-if 草案放在同一条时间线上.</p></div></div><div class="tower-decision-list">' + (rows.length ? rows.map(function(item){
+      return '<div class="tower-decision-row"><span>' + esc((item.type||"decision").toUpperCase()) + '</span><div><strong>' + esc(item.title) + '</strong><p>' + esc(item.detail) + '</p><small>' + esc(item.actor || "管理层") + ' · ' + esc(item.at ? item.at.slice(0,16).replace("T"," ") : "当前会话") + '</small></div></div>';
+    }).join("") : '<div class="brief-muted">还没有总部决策记录.</div>') + '</div></section>';
+  }
+
+  function renderNationalControlTower() {
+    var alerts=rolloutAlerts();
+    var deps=rolloutDependencies();
+    var open=alerts.filter(function(a){return rolloutAlertState(a.id)!=="resolved";});
+    var escalated=open.filter(function(a){return rolloutAlertState(a.id)==="escalated";}).length;
+    var blocked=deps.filter(function(d){return !d.passed;}).length;
+    var regions=scalePortfolioRegions();
+    var waveRisk=portfolioWaveDefinitions().filter(function(w){
+      var s=portfolioWaveSummary(regions,w.id); return s.budgetOver || s.parallelOver;
+    }).length;
+
+    var alertCards=open.map(function(a){
+      var st=rolloutAlertState(a.id);
+      return '<article class="tower-alert ' + a.severity + ' ' + st + '"><div class="tower-alert-head"><div><span>' + esc(a.source) + '</span><strong>' + esc(a.title) + '</strong></div><b>' + (a.severity==="high"?"P1":(a.severity==="medium"?"P2":"P3")) + '</b></div><p>' + esc(a.detail) + '</p><small>Owner · ' + esc(a.owner) + ' · Next · ' + esc(a.action) + '</small><div class="tower-alert-actions"><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="acknowledged" ' + (st==="acknowledged"?"disabled":"") + '>确认</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="escalated" ' + (st==="escalated"?"disabled":"") + '>升级</button><button data-rollout-alert="' + a.id + '" data-rollout-alert-status="resolved">关闭</button></div></article>';
+    }).join("");
+
+    var dependencyRows=deps.map(function(d){
+      return '<div class="tower-dependency ' + (d.passed?"passed":"blocked") + '"><span>' + (d.passed?"✓":"!") + '</span><div><strong>' + esc(d.title) + '</strong><p>' + esc(d.note) + '</p><small>Next · ' + esc(d.next) + '</small></div></div>';
+    }).join("");
+
+    return '<div class="control-tower-page">' +
+      '<section class="tower-hero"><div><span>NATIONAL ROLLOUT CONTROL TOWER</span><h1>全国推广真正需要盯的不是页面数量, 而是依赖、异常、资源与决策</h1><p>Control Tower 从现有 Pilot、90 天 Scale、Wave Planning、Evidence 和一线 Demo 数据动态汇总, 不建立第二套脱节状态.</p></div><div><strong>' + open.length + '</strong><span>当前异常</span></div></section>' +
+      '<section class="tower-kpis"><div class="' + (open.length?"risk":"good") + '"><span>开放异常</span><strong>' + open.length + '</strong><small>P1/P2/P3</small></div><div class="' + (escalated?"risk":"") + '"><span>已升级总部</span><strong>' + escalated + '</strong><small>需管理层处理</small></div><div class="' + (blocked?"risk":"good") + '"><span>阻塞依赖</span><strong>' + blocked + '</strong><small>共 ' + deps.length + ' 条</small></div><div class="' + (waveRisk?"risk":"good") + '"><span>Wave 容量异常</span><strong>' + waveRisk + '</strong><small>预算 / 并行</small></div><div><span>正式扩区</span><strong>' + (portfolioActiveTargetId() ? "1" : "0") + '</strong><small>' + (state.scaleExecutionPlan ? esc(state.scaleExecutionPlan.target) : "尚未启动") + '</small></div></section>' +
+      '<section class="tower-grid"><div class="tower-section"><div class="tower-section-head"><div><span>EXCEPTION CENTER</span><h2>异常与自动升级</h2><p>只显示当前真实状态触发的异常. 原因消失后, 异常会自动从列表退出.</p></div></div><div class="tower-alert-list">' + (alertCards || '<div class="tower-empty-good"><strong>当前没有开放异常</strong><span>Wave、资源、Gate 和 Evidence 均在可控范围.</span></div>') + '</div></div><div class="tower-section"><div class="tower-section-head"><div><span>DEPENDENCY MAP</span><h2>Rollout 依赖链</h2><p>前一层未通过时, 后一层即使页面上可操作, 也不应被当成正式经营进度.</p></div></div><div class="tower-dependency-list">' + dependencyRows + '</div></div></section>' +
+      renderRolloutWhatIf() +
+      renderRolloutDrilldown() +
+      renderRolloutDecisionLog() +
+    '</div>';
+  }
+
+
   function commitScaleGateDecision(key) {
     var gate = scaleGateModel();
     if (!scaleDecisionAllowed(key, gate)) {
@@ -4175,6 +4667,7 @@
       state.scaleValueEvidence = {};
       state.scaleRepeatabilityEvidence = {};
     }
+    pushRolloutDecision("scale","Scale Decision · " + meta.label,(key === "hold" ? "继续当前区域验证." : "目标区域 " + target.name + "."),{decision:key,targetId:snapshot.targetId});
     saveState();
     render();
     showToast(meta.label + (key === "hold" ? "" : " · " + target.name));
@@ -4655,6 +5148,7 @@
     else if (state.route === "pilot") view = renderPilot();
     else if (state.route === "scaleplan") view = renderScaleExecutionPlan();
     else if (state.route === "portfolio") view = renderScalePortfolio();
+    else if (state.route === "controltower") view = renderNationalControlTower();
     else if (state.route === "learning") view = renderLearning();
     else if (state.route === "guardrails") view = renderGuardrails();
     else if (state.route === "admin") view = renderAdmin();
@@ -5058,6 +5552,82 @@
         saveState();
         render();
         window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-rollout-alert]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var id=el.getAttribute("data-rollout-alert");
+        var alert=rolloutAlerts().find(function(a){return a.id===id;});
+        updateRolloutAlert(id,el.getAttribute("data-rollout-alert-status") || "acknowledged",alert ? alert.title : id);
+      });
+    });
+
+    $$("[data-rollout-whatif]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.rolloutWhatIfScenario=el.getAttribute("data-rollout-whatif") || "pause-region";
+        saveState(); render();
+      });
+    });
+
+    $$("[data-rollout-whatif-region]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.rolloutWhatIfRegion=el.getAttribute("data-rollout-whatif-region") || "east2";
+        saveState(); render();
+      });
+    });
+
+    $$("[data-rollout-whatif-draft]").forEach(function (el) {
+      el.addEventListener("click", saveRolloutWhatIfDraft);
+    });
+
+    $$("[data-rollout-whatif-apply]").forEach(function (el) {
+      el.addEventListener("click", applyRolloutWhatIf);
+    });
+
+    $$("[data-rollout-drill-reset]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.rolloutDrill={regionId:"pilot-east1",hospitalId:null,doctorId:null};
+        saveState(); render();
+      });
+    });
+
+    $$("[data-rollout-drill-region]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.rolloutDrill={regionId:el.getAttribute("data-rollout-drill-region"),hospitalId:null,doctorId:null};
+        saveState(); render();
+      });
+    });
+
+    $$("[data-rollout-drill-hospital]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (!state.rolloutDrill) state.rolloutDrill={regionId:"pilot-east1",hospitalId:null,doctorId:null};
+        state.rolloutDrill.hospitalId=el.getAttribute("data-rollout-drill-hospital");
+        state.rolloutDrill.doctorId=null;
+        saveState(); render();
+      });
+    });
+
+    $$("[data-rollout-drill-doctor]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.rolloutDrill.doctorId=el.getAttribute("data-rollout-drill-doctor");
+        saveState(); render();
+      });
+    });
+
+    $$("[data-rollout-open-hospital]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.selectedHospital=el.getAttribute("data-rollout-open-hospital");
+        state.route="hospital";
+        saveState(); render();
+      });
+    });
+
+    $$("[data-rollout-open-doctor]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.selectedDoctor=el.getAttribute("data-rollout-open-doctor");
+        state.route="doctor";
+        saveState(); render();
       });
     });
 
