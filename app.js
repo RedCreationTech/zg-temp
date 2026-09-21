@@ -1557,7 +1557,7 @@
       '</div><div>' +
         panel("05 · 下周只做这些","AI 根据本周 Context 生成, 经理勾选确认而不是照单全收",renderManagerReviewPlan()) +
       '</div></div>' +
-      '<div class="review-close-bar"><div><span>REVIEW GATE</span><strong>' + (state.managerReviewClosed ? "本周已关闭, 下周重点已锁定" : "确认下周重点后结束本周 Review") + '</strong><p>' + (state.managerReviewGenerated ? "当前已确认 " + planSelected + " 项下周行动." : "尚未生成下周行动计划.") + '</p></div><button class="btn primary" data-review-close>' + (state.managerReviewClosed ? "重新打开 Review" : "完成本周 Review") + '</button></div>';
+      '<div class="review-close-bar"><div><span>REVIEW GATE</span><strong>' + (state.managerReviewClosed ? "本周已关闭, 下周重点已锁定" : "确认下周重点后结束本周 Review") + '</strong><p>' + (state.managerReviewGenerated ? "当前已确认 " + planSelected + " 项下周行动." : "尚未生成下周行动计划.") + '</p></div><div class="review-close-actions">' + (state.managerReviewClosed && state.weeklyDecisionBrief ? '<button class="btn soft" data-view-weekly-brief>查看 Weekly Decision Brief</button>' : '') + '<button class="btn primary" data-review-close>' + (state.managerReviewClosed ? "重新打开 Review" : "完成本周 Review") + '</button></div></div>';
   }
 
   function renderTeamCoaching() {
@@ -3055,17 +3055,30 @@
       });
     });
 
-    $("[data-brief-regenerate]").forEach(function (el) {
+    $$("[data-view-weekly-brief]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (!state.weeklyDecisionBrief) {
+          showToast("当前还没有 Weekly Decision Brief");
+          return;
+        }
+        state.route = "weeklybrief";
+        saveState();
+        render();
+        window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-brief-regenerate]").forEach(function (el) {
       el.addEventListener("click", regenerateWeeklyDecisionBrief);
     });
 
-    $("[data-brief-print]").forEach(function (el) {
+    $$("[data-brief-print]").forEach(function (el) {
       el.addEventListener("click", function () {
         window.print();
       });
     });
 
-    $("[data-review-route]").forEach(function (el) {
+    $$("[data-review-route]").forEach(function (el) {
       el.addEventListener("click", function (event) {
         event.stopPropagation();
         var route = el.getAttribute("data-review-route");
