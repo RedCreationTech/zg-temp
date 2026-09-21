@@ -857,6 +857,7 @@
     var score = practiceDone ? Math.max(Number(rep.score || 0), Math.round((Number(rep.score || 0) + practiceScore) / 2)) : Number(rep.score || 0);
     var priority = Number(rep.priority || 0);
     if (practiceDone) priority = Math.max(35, priority - 20);
+    if (state.coachingAgendaStatus && state.coachingAgendaStatus[rep.id]) priority = Math.max(30, priority - 18);
     if (score < 65) priority += 5;
     return {
       score: score,
@@ -1562,6 +1563,14 @@
       '<div class="mt-16">' + renderManagementHistory() + '</div>';
   }
 
+  function renderTeamPlaybookLearningSignal() {
+    if (!state.teamPlaybook) return "";
+    var rep = (data.teamCoaching && data.teamCoaching.reps || []).find(function(r){ return r.id === state.teamPlaybook.repId; });
+    if (!rep) return "";
+    var visit = data.visits.find(function(v){ return v.id === rep.visitId; }) || data.visits[0];
+    return '<div class="team-playbook-signal"><div><span>TEAM PLAYBOOK CANDIDATE</span><strong>' + esc(rep.name) + ' · ' + esc(rep.strength) + '</strong><p>本周已由地区经理采纳为团队打法候选. 继续观察 2–3 次同类场景 Outcome 后, 再决定是否沉淀为 Decision Rule.</p></div><div class="team-playbook-chain"><b>Context</b><em>→</em><span>' + esc(visit.summary) + '</span><b>Action</b><em>→</em><span>' + esc(visit.nextScript) + '</span></div><button class="btn soft" data-route-jump="teamcoaching">返回团队辅导</button></div>';
+  }
+
   function renderLearning() {
     var allRules = data.rules.concat(state.customRules || []);
     var validated = allRules.filter(function (r) { return r.status === "validated"; }).length;
@@ -1598,6 +1607,7 @@
     var pendingReview = (state.ruleValidations || []).filter(function (v) { return v.status === "review_required"; }).length;
 
     return '<div class="page-banner"><div><span class="banner-kicker">LEARNING ENGINE</span><h2>把冠军打法从个人经验变成组织资产</h2><p>每一个有效或无效的下一步行动, 都回流为 Context → Decision → NBA → Action → Outcome 证据, 持续更新 Decision Rules.</p></div><div class="banner-side"><strong>' + validated + '/' + allRules.length + '</strong><span>当前规则已验证</span></div></div>' +
+      renderTeamPlaybookLearningSignal() +
       '<div class="learning-summary">' +
         metric("Decision Trace", String(decisionCount), "浏览器内模拟的结构化判断", "", "D") +
         metric("Outcome", String(outcomeCount), "真实业务信号回流", outcomeCount ? "+" + outcomeCount : "", "O") +
