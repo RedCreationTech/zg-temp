@@ -690,7 +690,48 @@
     );
   }
 
+  function renderManagementWorkbench() {
+    var cards = (data.risks || []).map(function (r) {
+      var selected = state.managementDecisions[r.id] || "";
+      var recommended = r.recommended || "";
+      var buttons = Object.keys(MANAGEMENT_ACTIONS).map(function (key) {
+        var meta = MANAGEMENT_ACTIONS[key];
+        var classes = "management-choice " + meta.tone + (selected === key ? " selected" : "") + (recommended === key ? " recommended" : "");
+        return '<button class="' + classes + '" data-management-risk="' + esc(r.id) + '" data-management-decision="' + key + '"><span>' + esc(meta.label) + '</span>' + (recommended === key ? '<small>AI 推荐</small>' : '') + '</button>';
+      }).join("");
+      var current = selected
+        ? '<div class="management-current"><span>已决策</span><strong>' + esc(managementLabel(selected)) + '</strong><button data-management-clear="' + esc(r.id) + '">撤销</button></div>'
+        : '<div class="management-current pending"><span>等待管理层决策</span><strong>请选择动作</strong></div>';
+
+      return '<article class="management-card ' + (selected ? "resolved" : "") + '">' +
+        '<div class="management-card-head"><div><span class="status ' + (r.level === "高" ? "risk" : "doing") + '">' + esc(r.level) + '</span><strong>' + esc(r.object) + '</strong></div><span class="management-owner">Owner · ' + esc(r.owner) + '</span></div>' +
+        '<p class="management-issue">' + esc(r.issue) + '</p>' +
+        '<div class="management-ai"><b>AI 判断</b><span>' + esc(r.reason) + '</span></div>' +
+        '<div class="management-choices">' + buttons + '</div>' +
+        current +
+      '</article>';
+    }).join("");
+
+    return panel("管理决策工作台", "每个问题必须收敛到 加资源 / 保持 / 纠偏 / 升级 / 停止 中的一个明确动作",
+      '<div class="management-grid">' + cards + '</div>'
+    );
+  }
+
+  function renderManagementHistory() {
+    var items = (state.managementHistory || []).slice(0, 6).map(function (item) {
+      var time = "";
+      try { time = new Date(item.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }); } catch (e) { time = ""; }
+      return '<div class="decision-history-item"><time>' + esc(time) + '</time><div><strong>' + esc(item.object) + '</strong><span>' + esc(item.label) + ' · ' + esc(item.owner) + '</span></div><p>' + esc(item.reason) + '</p></div>';
+    }).join("");
+    if (!items) items = '<div class="empty-state"><strong>还没有管理决策</strong><span>在上方选择一个管理动作, 这里会形成经营决策记录.</span></div>';
+    return panel("本周管理决策记录", "这些决策会反向改变医院资源、代表行动和 Pilot 指标",
+      '<div class="decision-history">' + items + '</div>'
+    );
+  }
+
   function renderCockpit() {
+    var pm = computePilotMetrics();
+    var unresolved = Math.max(0, (data.risks || []).length - pm.resolved);
     var questions = [
       ["01", "哪 3 家医院本周最值得我关注?", "重点医院下一步动作"],
       ["02", "哪 5 个医生下一步最值得推进?", "关键医生下一步推进"],
@@ -701,30 +742,40 @@
       return '<div class="question-card" data-cockpit="' + i + '"><div class="question-no">' + q[0] + '</div><h4>' + q[1] + '</h4><p>' + q[2] + '</p></div>';
     }).join("");
 
-    var rows = data.risks.map(function (r) {
-      return '<tr><td><span class="status ' + (r.level === "高" ? "risk" : "doing") + '">' + esc(r.level) + '</span></td><td><b>' + esc(r.object) + '</b></td><td>' + esc(r.issue) + '</td><td>' + esc(r.owner) + '</td><td><button class="tiny-btn primary" data-risk="' + esc(r.object) + '">查看动作</button></td></tr>';
+    var rows = (data.risks || []).map(function (r) {
+      var decision = state.managementDecisions[r.id];
+      return '<tr><td><span class="status ' + (r.level === "高" ? "risk" : "doing") + '">' + esc(r.level) + '</span></td><td><b>' + esc(r.object) + '</b></td><td>' + esc(r.issue) + '</td><td>' + esc(r.owner) + '</td><td>' +
+        (decision ? '<span class="management-result ' + esc(decision) + '">' + esc(managementLabel(decision)) + '</span>' : '<button class="tiny-btn primary" data-risk="' + esc(r.object) + '">查看动作</button>') +
+      '</td></tr>';
     }).join("");
 
-    return '<div class="page-banner"><div><span class="banner-kicker">DIRECTOR DECISION COCKPIT</span><h2>不是看更多数据, 而是更快做管理决策</h2><p>所有视图都收敛到一件事: 哪些行动应该推进、纠偏、升级、停止或沉淀为组织打法.</p></div><div class="banner-side"><strong>4</strong><span>需要管理层介入</span></div></div>' +
+    return '<div class="page-banner"><div><span class="banner-kicker">DIRECTOR DECISION COCKPIT</span><h2>不是看更多数据, 而是更快做管理决策</h2><p>所有视图都收敛到一件事: 哪些行动应该推进、纠偏、升级、停止或沉淀为组织打法.</p></div><div class="banner-side"><strong>' + unresolved + '</strong><span>仍待管理层决策</span></div></div>' +
       '<div class="cockpit-questions">' + questions + '</div>' +
       '<div class="metric-grid">' +
-        metric("重点医院 NBA 完成", "78%", "目标 85%", "+6%", "院") +
-        metric("关键医生推进", "14/19", "5 个动作尚未形成承诺", "", "医") +
-        metric("策略偏离", "4", "较上周减少", "-2", "偏") +
-        metric("Rule 学习速度", "6", "本月新增验证规则", "+3", "R") +
+        metric("管理事项已决策", pm.resolved + "/4", "决策会回写到执行页面", pm.resolved ? "+" + pm.resolved : "", "决") +
+        metric("NBA 采纳率", pm.nbaAdoption + "%", "管理动作会推动关键 NBA 进入执行", "+" + Math.max(0, pm.nbaAdoption - 76) + "%", "A") +
+        metric("行动完成率", pm.actionCompletion + "%", "当前原型动作状态实时计算", pm.actionCompletion >= 75 ? "达标" : "需提升", "%") +
+        metric("Review 覆盖率", pm.reviewCoverage + "%", "已决策事项进入周度复盘", "+" + Math.max(0, pm.reviewCoverage - 71) + "%", "审") +
       '</div>' +
-      panel("执行风险与管理下一步", "只展示需要管理层做决定的事项",
-        '<table class="risk-table"><thead><tr><th>风险</th><th>对象</th><th>为什么需要介入</th><th>Owner</th><th>下一步</th></tr></thead><tbody>' + rows + '</tbody></table>'
-      ) +
+      renderManagementWorkbench() +
+      '<div class="mt-16">' +
+        panel("执行风险与管理结果", "决策以后, 风险事项不再只停留在列表里",
+          '<table class="risk-table"><thead><tr><th>风险</th><th>对象</th><th>为什么需要介入</th><th>Owner</th><th>管理动作</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        ) +
+      '</div>' +
       '<div class="grid-equal mt-16">' +
-        panel("区域资源建议", "从平均投入切换到高价值动作",
-          '<div class="insight-card"><div class="insight-head"><strong>增加 · 华东附一 MDT 场景</strong><span class="insight-tag">+ 医学资源</span></div><p>证据缺口是当前最高价值杠杆, 建议增加一次医学支持, 不增加泛化活动预算.</p></div>' +
-          '<div class="insight-card"><div class="insight-head"><strong>停止 · 海川大型活动筹备</strong><span class="insight-tag">- 低确定性</span></div><p>医院决策链尚未清晰. 暂停活动预算, 先购买信息并完成影响者地图.</p></div>'
+        panel("区域资源策略", "管理动作会改变 Hospital Agent 的资源计划",
+          '<div class="insight-card"><div class="insight-head"><strong>华东附一 MDT 场景</strong><span class="insight-tag">' + esc(state.managementDecisions.m1 ? managementLabel(state.managementDecisions.m1) : "待决策") + '</span></div><p>证据缺口是当前最高价值杠杆. 推荐增加场景化医学支持, 不增加泛化活动预算.</p></div>' +
+          '<div class="insight-card"><div class="insight-head"><strong>海川大型活动筹备</strong><span class="insight-tag">' + esc(state.managementDecisions.m3 ? managementLabel(state.managementDecisions.m3) : "待决策") + '</span></div><p>决策链尚未清晰. 推荐先购买信息并完成影响者地图, 暂缓高成本活动.</p></div>'
         ) +
         panel("Action → Outcome", "管理层看到行动是否真正改变业务里程碑",
-          '<div class="dimension-row"><span>行动完成</span><div class="bar"><i style="width:78%"></i></div><b>78%</b></div><div class="dimension-row"><span>行为承诺</span><div class="bar"><i style="width:67%"></i></div><b>67%</b></div><div class="dimension-row"><span>医院里程碑</span><div class="bar"><i style="width:59%"></i></div><b>59%</b></div><div class="dimension-row"><span>规则复用</span><div class="bar"><i style="width:71%"></i></div><b>71%</b></div>'
+          '<div class="dimension-row"><span>行动完成</span><div class="bar"><i style="width:' + pm.actionCompletion + '%"></i></div><b>' + pm.actionCompletion + '%</b></div>' +
+          '<div class="dimension-row"><span>NBA 采纳</span><div class="bar"><i style="width:' + pm.nbaAdoption + '%"></i></div><b>' + pm.nbaAdoption + '%</b></div>' +
+          '<div class="dimension-row"><span>Outcome 转化</span><div class="bar"><i style="width:' + pm.outcomeRate + '%"></i></div><b>' + pm.outcomeRate + '%</b></div>' +
+          '<div class="dimension-row"><span>扩展准备度</span><div class="bar"><i style="width:' + pm.scaleReadiness + '%"></i></div><b>' + pm.scaleReadiness + '%</b></div>'
         ) +
-      '</div>';
+      '</div>' +
+      '<div class="mt-16">' + renderManagementHistory() + '</div>';
   }
 
   function renderLearning() {
@@ -817,13 +868,21 @@
   }
 
   function renderResourcePlan(h) {
+    var decisions = managementForHospital(h.id);
+    var decisionBanner = decisions.length ? decisions.map(function (item) {
+      var meta = MANAGEMENT_ACTIONS[item.decision] || {};
+      return '<div class="management-inline ' + esc(meta.tone || '') + '"><span>销售总监已决策</span><strong>' + esc(managementLabel(item.decision)) + '</strong><p>' + esc(item.risk.action) + '</p></div>';
+    }).join("") : "";
+
     var rows = (h.resources || []).map(function (r, i) {
-      var statusClass = r.status === "ready" ? "done" : (r.status === "doing" ? "doing" : (r.status === "hold" ? "risk" : "todo"));
-      var statusText = { ready: "已就绪", doing: "执行中", planned: "计划中", hold: "暂缓" }[r.status] || r.status;
+      var currentStatus = resourceStatus(h.id, r);
+      var statusClass = currentStatus === "ready" ? "done" : (currentStatus === "doing" ? "doing" : (currentStatus === "hold" ? "risk" : "todo"));
+      var statusText = { ready: "已就绪", doing: "执行中", planned: "计划中", hold: "暂缓" }[currentStatus] || currentStatus;
       return '<tr data-resource-row="' + i + '"><td><span class="resource-type">' + esc(r.type) + '</span></td><td><b>' + esc(r.item) + '</b></td><td>' + esc(r.owner) + '</td><td>' + esc(r.timing) + '</td><td><span class="soft-chip">' + esc(r.lever) + '</span></td><td><button class="status ' + statusClass + '" data-resource-toggle="' + i + '">' + esc(statusText) + '</button></td></tr>';
     }).join("");
 
     return panel("资源配置计划", "每一份资源都必须映射到具体杠杆点, 而不是平均铺开",
+      decisionBanner +
       '<table class="risk-table resource-table"><thead><tr><th>资源</th><th>动作</th><th>Owner</th><th>时间</th><th>对应杠杆</th><th>状态</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<div class="resource-summary"><div><span>本周资源策略</span><strong>' + (h.id === "h3" ? "先买信息, 暂缓重投入" : "聚焦 Top 1-2 杠杆, 资源不平均分配") + '</strong></div><button class="btn primary" data-resource-review>生成经理 Review</button></div>'
     );
@@ -934,42 +993,66 @@
   }
 
   function renderPilot() {
-    var weeks = [
-      ["W1","启动","done"],["W2","诊断","done"],["W3","运行","done"],["W4","运行","active"],
-      ["W5","运行",""],["W6","运行",""],["W7","复盘",""],["W8","扩展",""]
-    ].map(function (w) {
-      return '<div class="week-item ' + w[2] + '"><b>' + w[0] + '</b><span>' + w[1] + '</span></div>';
+    var pm = computePilotMetrics();
+    var currentWeek = Math.max(1, Math.min(8, Number(state.pilotWeek || 4)));
+    var weekDefs = [["W1","启动"],["W2","诊断"],["W3","运行"],["W4","运行"],["W5","运行"],["W6","运行"],["W7","复盘"],["W8","扩展"]];
+    var weeks = weekDefs.map(function (w, i) {
+      var no = i + 1;
+      var cls = no < currentWeek ? "done" : (no === currentWeek ? "active" : "");
+      return '<button class="week-item ' + cls + '" data-pilot-week="' + no + '"><b>' + w[0] + '</b><span>' + w[1] + '</span></button>';
     }).join("");
 
+    var gate = function (value, target, suffix) {
+      var ok = value >= target;
+      return '<span class="health-pill ' + (ok ? '' : 'warn') + '">' + (ok ? "达标" : "需提升") + '</span>';
+    };
+
     var table =
-      '<table class="pilot-table"><thead><tr><th>验证目标</th><th>本周</th><th>8 周目标</th><th>状态</th></tr></thead><tbody>' +
-      '<tr><td>经理周活跃率</td><td>84%</td><td>≥ 80%</td><td><span class="health-pill">达标</span></td></tr>' +
-      '<tr><td>NBA 采纳率</td><td>76%</td><td>≥ 70%</td><td><span class="health-pill">达标</span></td></tr>' +
-      '<tr><td>行动完成率</td><td>68%</td><td>≥ 75%</td><td><span class="health-pill warn">需提升</span></td></tr>' +
-      '<tr><td>Review 覆盖率</td><td>71%</td><td>≥ 70%</td><td><span class="health-pill">达标</span></td></tr>' +
-      '<tr><td>Rule 有效复用</td><td>6 条</td><td>≥ 8 条</td><td><span class="health-pill warn">验证中</span></td></tr>' +
+      '<table class="pilot-table"><thead><tr><th>验证目标</th><th>当前</th><th>8 周目标</th><th>状态</th></tr></thead><tbody>' +
+      '<tr><td>经理周活跃率</td><td>' + pm.weeklyActive + '%</td><td>≥ 80%</td><td>' + gate(pm.weeklyActive,80) + '</td></tr>' +
+      '<tr><td>NBA 采纳率</td><td>' + pm.nbaAdoption + '%</td><td>≥ 70%</td><td>' + gate(pm.nbaAdoption,70) + '</td></tr>' +
+      '<tr><td>行动完成率</td><td>' + pm.actionCompletion + '%</td><td>≥ 75%</td><td>' + gate(pm.actionCompletion,75) + '</td></tr>' +
+      '<tr><td>Review 覆盖率</td><td>' + pm.reviewCoverage + '%</td><td>≥ 70%</td><td>' + gate(pm.reviewCoverage,70) + '</td></tr>' +
+      '<tr><td>Rule 有效复用</td><td>' + pm.ruleReuse + ' 条</td><td>≥ 8 条</td><td>' + gate(pm.ruleReuse,8) + '</td></tr>' +
       '</tbody></table>';
 
-    return '<div class="page-banner"><div><span class="banner-kicker">8-WEEK PAID PILOT</span><h2>不是“上线一个 AI”, 而是验证一套行动系统</h2><p>同时验证 Market Proof 与 Product Proof: 客户愿意付费、经理愿意使用、行动能被追踪、结果能回流、规则能学习.</p></div><div class="banner-side"><strong>W4</strong><span>当前运行周</span></div></div>' +
+    var nbaCount = 96 + (state.recentNBAs || []).length;
+    var adoptedCount = 73 + (state.serverActions || []).length + pm.resolved;
+    var executedCount = 65 + pm.resolved + (state.serverActions || []).filter(function (a) { return a.status === "done"; }).length;
+    var outcomeCount = 41 + (state.outcomes || []).length;
+
+    var history = (state.managementHistory || []).slice(0, 4).map(function (item) {
+      return '<div class="pilot-decision"><span>' + esc(item.label) + '</span><strong>' + esc(item.object) + '</strong><p>' + esc(item.reason) + '</p></div>';
+    }).join("");
+    if (!history) history = '<div class="empty-state"><strong>还没有经营决策回流</strong><span>去总监驾驶舱做出管理动作, 这里的 Pilot 指标会随之变化.</span></div>';
+
+    return '<div class="page-banner"><div><span class="banner-kicker">8-WEEK PAID PILOT</span><h2>不是“上线一个 AI”, 而是验证一套行动系统</h2><p>同时验证 Market Proof 与 Product Proof: 客户愿意付费、经理愿意使用、行动能被追踪、结果能回流、规则能学习.</p></div><div class="banner-side"><strong>W' + currentWeek + '</strong><span>当前模拟周</span></div></div>' +
+      '<div class="pilot-week-head"><div><span class="eyebrow">PILOT TIMELINE</span><strong>点击周次可模拟 Pilot 推进</strong></div><div class="pilot-week-actions"><button class="btn ghost" data-pilot-prev ' + (currentWeek === 1 ? 'disabled' : '') + '>上一周</button><button class="btn primary" data-pilot-next ' + (currentWeek === 8 ? 'disabled' : '') + '>推进到下一周</button></div></div>' +
       '<div class="week-track">' + weeks + '</div>' +
       '<div class="metric-grid mt-16">' +
-        metric("试点医院", "3", "均已进入周度 GPS", "", "院") +
-        metric("活跃用户", "28", "代表 21 / 经理 6 / 总监 1", "+4", "人") +
-        metric("累计 NBA", "96", "本周新增 24", "+24", "A") +
-        metric("有效 Rule", "6", "由真实 Outcome 验证", "+2", "R") +
+        metric("管理事项已决策", pm.resolved + "/4", "管理决策直接影响 Pilot 验证", pm.resolved ? "+" + pm.resolved : "", "决") +
+        metric("NBA 采纳率", pm.nbaAdoption + "%", "从生成建议到被一线采纳", "+" + Math.max(0,pm.nbaAdoption-76) + "%", "A") +
+        metric("Outcome 转化", pm.outcomeRate + "%", "Action 以后产生真实业务信号", pm.outcomes ? "+" + pm.outcomes : "", "O") +
+        metric("Scale Readiness", pm.scaleReadiness + "%", "是否具备扩区与扩 Agent 条件", "+" + Math.max(0,pm.scaleReadiness-63) + "%", "扩") +
       '</div>' +
       '<div class="pilot-grid">' +
         panel("价值漏斗", "从“AI 给建议”一直追到业务结果",
-          '<div class="funnel"><div class="funnel-step"><strong>96</strong><span>NBA 生成</span><b>100%</b></div><div class="funnel-step"><strong>73</strong><span>被一线采纳</span><b>76%</b></div><div class="funnel-step"><strong>65</strong><span>形成执行</span><b>68%</b></div><div class="funnel-step"><strong>41</strong><span>产生 Outcome</span><b>43%</b></div></div><div class="divider"></div><p class="small-note">重点不是追求生成量, 而是持续提高 NBA → Action → Outcome 的转化质量.</p>'
+          '<div class="funnel"><div class="funnel-step"><strong>' + nbaCount + '</strong><span>NBA 生成</span><b>100%</b></div><div class="funnel-step"><strong>' + adoptedCount + '</strong><span>被一线采纳</span><b>' + pm.nbaAdoption + '%</b></div><div class="funnel-step"><strong>' + executedCount + '</strong><span>形成执行</span><b>' + pm.actionCompletion + '%</b></div><div class="funnel-step"><strong>' + outcomeCount + '</strong><span>产生 Outcome</span><b>' + pm.outcomeRate + '%</b></div></div><div class="divider"></div><p class="small-note">重点不是追求生成量, 而是持续提高 NBA → Action → Outcome 的转化质量.</p>'
         ) +
         panel("Pilot Gate", "W8 是否扩展由这些可量化证据决定", table) +
       '</div>' +
       '<div class="grid-equal mt-16">' +
-        panel("本周运营动作", "GPS Operations",
-          '<div class="timeline"><div class="timeline-item done"><span class="timeline-dot"></span><b>周一 · 更新医院 Context</b><span>数据、关键事件、医生变化和资源约束.</span></div><div class="timeline-item"><span class="timeline-dot"></span><b>周三 · 中期 Action Review</b><span>检查高优先 NBA 是否真正进入执行.</span></div><div class="timeline-item"><span class="timeline-dot"></span><b>周五 · Outcome & Rule Review</b><span>复盘有效/无效判断, 更新候选规则.</span></div></div>'
+        panel("Market Proof / Product Proof", "销售项目和产品使用必须同时成立",
+          '<div class="proof-grid"><div class="proof-card"><span>MARKET PROOF</span><strong>' + pm.marketProof + '%</strong><p>付费意愿、经理参与、业务问题足够刚性.</p><div class="bar"><i style="width:' + pm.marketProof + '%"></i></div></div><div class="proof-card"><span>PRODUCT PROOF</span><strong>' + pm.productProof + '%</strong><p>NBA 被采纳、Action 被执行、Outcome 能回流.</p><div class="bar"><i style="width:' + pm.productProof + '%"></i></div></div></div>'
         ) +
         panel("扩展准备度", "Land → Prove → Expand → Operate",
-          '<div class="dimension-row"><span>Market Proof</span><div class="bar"><i style="width:79%"></i></div><b>79%</b></div><div class="dimension-row"><span>Product Proof</span><div class="bar"><i style="width:74%"></i></div><b>74%</b></div><div class="dimension-row"><span>Data Readiness</span><div class="bar"><i style="width:86%"></i></div><b>86%</b></div><div class="dimension-row"><span>Scale Readiness</span><div class="bar"><i style="width:63%"></i></div><b>63%</b></div><button class="btn primary full mt-12" data-ai-generate="cockpit">生成本周 Pilot 决策简报</button>'
+          '<div class="dimension-row"><span>Market Proof</span><div class="bar"><i style="width:' + pm.marketProof + '%"></i></div><b>' + pm.marketProof + '%</b></div><div class="dimension-row"><span>Product Proof</span><div class="bar"><i style="width:' + pm.productProof + '%"></i></div><b>' + pm.productProof + '%</b></div><div class="dimension-row"><span>Data Readiness</span><div class="bar"><i style="width:' + pm.dataReadiness + '%"></i></div><b>' + pm.dataReadiness + '%</b></div><div class="dimension-row"><span>Scale Readiness</span><div class="bar"><i style="width:' + pm.scaleReadiness + '%"></i></div><b>' + pm.scaleReadiness + '%</b></div><button class="btn primary full mt-12" data-ai-generate="cockpit">生成本周 Pilot 决策简报</button>'
+        ) +
+      '</div>' +
+      '<div class="grid-equal mt-16">' +
+        panel("本周经营决策回流", "总监驾驶舱做出的动作会在这里进入 Pilot 运营复盘", '<div class="pilot-decisions">' + history + '</div>') +
+        panel("GPS Operations", "每周不是看报表, 而是持续跑同一个学习循环",
+          '<div class="timeline"><div class="timeline-item done"><span class="timeline-dot"></span><b>周一 · 更新 Context</b><span>医院、医生、事件和资源约束更新.</span></div><div class="timeline-item ' + (currentWeek >= 4 ? 'done' : '') + '"><span class="timeline-dot"></span><b>周三 · Action Review</b><span>检查高优先 NBA 是否真正进入执行.</span></div><div class="timeline-item ' + (pm.outcomes ? 'done' : '') + '"><span class="timeline-dot"></span><b>周五 · Outcome & Rule Review</b><span>复盘有效/无效判断, 更新候选规则.</span></div></div>'
         ) +
       '</div>';
   }
