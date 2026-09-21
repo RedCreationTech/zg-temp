@@ -372,6 +372,17 @@
     }).join("");
     if (!outcomeRows) outcomeRows = '<tr><td colspan="4" class="muted">暂无 Outcome. 生成 NBA 后点击“记录 Outcome”即可把真实业务信号回流.</td></tr>';
 
+    var validationRows = (state.ruleValidations || []).slice(0, 10).map(function (v) {
+      var canReview = v.status === "review_required";
+      var actions = canReview
+        ? '<button class="tiny-btn primary" data-rule-validation="' + esc(v.id) + '" data-review-action="approve">批准</button> <button class="tiny-btn" data-rule-validation="' + esc(v.id) + '" data-review-action="reject">驳回</button>'
+        : '<span class="status ' + (v.status === "applied" || v.status === "approved" ? "done" : "doing") + '">' + esc(v.status) + '</span>';
+      return '<tr><td><b>' + esc(v.ruleId) + '</b></td><td>' + esc(v.previousConfidence) + ' → ' + esc(v.proposedConfidence) + '</td><td>' + esc(v.evidenceDirection) + '</td><td>' + esc(v.effectiveness) + '</td><td>' + actions + '</td></tr>';
+    }).join("");
+    if (!validationRows) validationRows = '<tr><td colspan="5" class="muted">暂无 RuleValidation. Outcome 回流后系统会自动生成验证提案.</td></tr>';
+
+    var pendingReview = (state.ruleValidations || []).filter(function (v) { return v.status === "review_required"; }).length;
+
     return '<div class="page-banner"><div><span class="banner-kicker">LEARNING ENGINE</span><h2>把冠军打法从个人经验变成组织资产</h2><p>每一个有效或无效的下一步行动, 都回流为 Context → Decision → NBA → Action → Outcome 证据, 持续更新 Decision Rules.</p></div><div class="banner-side"><strong>' + validated + '/' + allRules.length + '</strong><span>当前规则已验证</span></div></div>' +
       '<div class="learning-summary">' +
         metric("Decision Trace", String(decisionCount), "服务端已保存的结构化判断", "", "D") +
@@ -386,6 +397,11 @@
         ) +
         panel("Outcome 回流", "Action 是否真正改变了客户行为或业务里程碑",
           '<table class="risk-table"><thead><tr><th>结果</th><th>业务信号</th><th>有效性</th><th>记录人</th></tr></thead><tbody>' + outcomeRows + '</tbody></table>'
+        ) +
+      '</div>' +
+      '<div class="mt-16">' +
+        panel("Rule Validation Queue", "Outcome 不直接改规则. 系统先形成置信度更新提案, 高风险项必须 Human Review",
+          '<div class="flex-between" style="margin-bottom:10px"><span class="small-note">待人工审核: ' + pendingReview + '</span><span class="soft-chip">Human Review Gate</span></div><table class="risk-table"><thead><tr><th>Rule</th><th>Confidence</th><th>证据方向</th><th>Effectiveness</th><th>处理</th></tr></thead><tbody>' + validationRows + '</tbody></table>'
         ) +
       '</div>' +
       '<div class="mt-16">' +
@@ -894,6 +910,17 @@
 
     var refreshDecisionTrace = $("#refreshDecisionTrace");
     if (refreshDecisionTrace) refreshDecisionTrace.addEventListener("click", refreshDecisionData);
+
+    $("[data-rule-validation]").forEach(function (el) {
+      el.addEventListener("click", async function () {
+        var id = el.getAttribute("data-rule-validation");
+        var action = el.getAttribute("data-review-action");
+        el.disabled = true;
+        var result = await window.ZG_API.reviewRuleValidation(id, action, state.session && state.session.name);
+        showToast(result.offline ? "离线模式: 已模拟 Rule Review" : (action === "approve" ? "RuleValidation 已批准" : "RuleValidation 已驳回"));
+        await refreshDecisionData();
+      });
+    });
 
     var audio = $("#visitAudio");
     if (audio) audio.addEventListener("change", function () {
