@@ -3141,9 +3141,17 @@
   function renderSecondWave(plan) {
     var unlocked = secondWaveUnlocked();
     var wave = scaleSecondWave(plan);
-    var hospitals = wave.hospitals.map(function(h){return '<div><span>' + esc(h.tier) + ' 类</span><strong>' + esc(h.name) + '</strong><p>' + esc(h.focus) + '</p></div>';}).join("");
-    var reps = wave.reps.map(function(r){return '<div><span>' + esc(r.role) + '</span><strong>' + esc(r.name) + '</strong><p>' + esc(r.focus) + '</p></div>';}).join("");
-    return '<section class="scale-second-wave ' + (unlocked ? "unlocked" : "locked") + '"><div class="second-wave-head"><div><span>SECOND WAVE</span><h2>' + (unlocked ? "第二批扩展已解锁" : "第二批扩展尚未解锁") + '</h2><p>' + (unlocked ? "Day 30 Gate 已通过, 可以开始准备第二批医院与代表." : "只有 Day 30 Gate 通过 / 有条件通过后才允许扩到第二批.") + '</p></div><b>' + (unlocked ? "UNLOCKED" : "LOCKED") + '</b></div><div class="second-wave-grid"><div><span>候选医院</span><div class="second-wave-items">' + (hospitals || '<div class="brief-muted">当前计划已包含所有候选医院.</div>') + '</div></div><div><span>候选代表</span><div class="second-wave-items">' + (reps || '<div class="brief-muted">当前计划已包含所有候选代表.</div>') + '</div></div></div></section>';
+    var launch = state.scaleSecondWaveLaunch || { hospitals:{},reps:{},startedAt:null };
+    var stats = secondWaveLaunchStats(plan);
+    var hospitals = wave.hospitals.map(function(h){
+      var started = !!launch.hospitals[h.id];
+      return '<button class="second-wave-item ' + (started ? "started" : "") + '" data-second-wave-type="hospital" data-second-wave-id="' + h.id + '" ' + (!unlocked ? "disabled" : "") + '><div><span>' + esc(h.tier) + ' 类</span><strong>' + esc(h.name) + '</strong><p>' + esc(h.focus) + '</p></div><b>' + (started ? "✓ 已启动" : "启动医院") + '</b></button>';
+    }).join("");
+    var reps = wave.reps.map(function(r){
+      var started = !!launch.reps[r.id];
+      return '<button class="second-wave-item ' + (started ? "started" : "") + '" data-second-wave-type="rep" data-second-wave-id="' + r.id + '" ' + (!unlocked ? "disabled" : "") + '><div><span>' + esc(r.role) + '</span><strong>' + esc(r.name) + '</strong><p>' + esc(r.focus) + '</p></div><b>' + (started ? "✓ 已启动" : "启动代表") + '</b></button>';
+    }).join("");
+    return '<section class="scale-second-wave ' + (unlocked ? "unlocked" : "locked") + '"><div class="second-wave-head"><div><span>SECOND WAVE</span><h2>' + (unlocked ? "第二批扩展已解锁" : "第二批扩展尚未解锁") + '</h2><p>' + (unlocked ? "Day 30 Gate 已通过, 可以逐个启动第二批医院与代表." : "只有 Day 30 Gate 通过 / 有条件通过后才允许扩到第二批.") + '</p></div><div class="second-wave-status"><b>' + (unlocked ? "UNLOCKED" : "LOCKED") + '</b><strong>' + stats.started + '/' + stats.total + '</strong><span>已启动</span></div></div><div class="second-wave-grid"><div><span>候选医院</span><div class="second-wave-items">' + (hospitals || '<div class="brief-muted">当前计划已包含所有候选医院.</div>') + '</div></div><div><span>候选代表</span><div class="second-wave-items">' + (reps || '<div class="brief-muted">当前计划已包含所有候选代表.</div>') + '</div></div></div></section>';
   }
 
   function scaleGateSummary(gateId) {
@@ -3358,6 +3366,7 @@
     return '<div class="scale-plan-page">' +
       '<div class="scale-plan-toolbar"><button class="btn ghost" data-route-jump="pilot">返回 Scale Gate</button><div><button class="btn soft" data-scale-plan-regenerate>重新生成计划</button><button class="btn primary" data-scale-plan-executive>Executive Brief</button></div></div>' +
       '<header class="scale-plan-cover"><div><span>SCALE EXECUTION PLAN · 30 / 60 / 90 DAYS</span><h1>' + esc(plan.target) + ' · ' + esc(plan.scope) + '</h1><p>' + esc(plan.decisionLabel) + ' 已转化为可执行复制计划. 每个阶段必须通过管理 Gate, 不以“部署完成”代替业务验证.</p></div><div class="scale-plan-cover-meta"><strong>' + overall.pct + '%</strong><span>总执行进度</span><small>' + overall.done + '/' + overall.total + ' 项完成</small></div></header>' +
+      renderScaleOperationsCockpit(plan) +
       '<section class="scale-plan-summary"><div><span>目标区域</span><strong>' + esc(plan.target) + '</strong><small>相似度 ' + plan.similarity + '%</small></div><div><span>首批医院</span><strong>' + plan.hospitals.length + '</strong><small>只复制高相似场景</small></div><div><span>首批代表</span><strong>' + plan.reps.length + '</strong><small>先做能力基线</small></div><div><span>复制 Agent</span><strong>' + plan.agents.length + '</strong><small>按阶段启用</small></div><div><span>模拟执行日</span><strong>Day ' + state.scaleExecutionDay + '</strong><small>计划 vs 实际动态计算</small></div></section>' +
       renderScaleExecutionCockpit(plan) +
       '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>01</span><div><h2>30 / 60 / 90 天执行路线</h2><p>阶段目标固定, 任务完成状态保存在当前浏览器.</p></div></div><div class="scale-phase-tabs">' + phaseTabs + '</div><div class="scale-phase-body"><div class="scale-phase-header"><div><span>' + esc(phase.gate) + '</span><h3>' + esc(phase.title) + '</h3><p>' + esc(phase.objective) + '</p></div><div><strong>' + phaseProgress.pct + '%</strong><span>' + phaseProgress.done + '/' + phaseProgress.total + '</span></div></div><div class="scale-plan-task-list">' + tasks + '</div><div class="scale-phase-success"><span>PHASE SUCCESS</span><strong>' + esc(phase.success) + '</strong></div></div></section>' +
@@ -3365,6 +3374,7 @@
       renderSecondWave(plan) +
       '<section class="scale-plan-grid"><div class="scale-plan-section"><div class="scale-plan-section-title"><span>04</span><div><h2>Agent 复制顺序</h2><p>先复制行动闭环, 再复制管理与学习能力.</p></div></div><div class="scale-plan-agents">' + agents + '</div></div><div class="scale-plan-section"><div class="scale-plan-section-title"><span>05</span><div><h2>数据准备清单</h2><p>数据不齐时不强行复制模型.</p></div></div><div class="scale-data-list">' + dataItems + '</div></div></section>' +
       '<section class="scale-plan-section"><div class="scale-plan-section-title"><span>06</span><div><h2>Management Gates</h2><p>Day 30 / 60 / 90 必须由经理显式做“暂缓 / 有条件通过 / 通过”判断.</p></div></div>' + renderScaleGateReviews(plan) + '</section>' +
+      renderGateReviewOperations(plan) +
       '<footer class="scale-plan-footer"><div><span>SCALE PRINCIPLE</span><strong>复制的是可验证的行动与管理闭环, 不是把软件菜单搬到另一个区域.</strong></div><div><span>PLAN ID</span><strong>' + esc(plan.id) + '</strong></div></footer>' +
     '</div>';
   }
@@ -4187,6 +4197,30 @@
         saveState();
         render();
         window.scrollTo({ top:0, behavior:"smooth" });
+      });
+    });
+
+    $$("[data-gate-summary]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        generateGateReviewSummary(el.getAttribute("data-gate-summary"));
+      });
+    });
+
+    $$("[data-recovery-plan]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        createRecoveryPlan(el.getAttribute("data-recovery-plan"));
+      });
+    });
+
+    $$("[data-recovery-commit]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        toggleRecoveryCommitment(el.getAttribute("data-recovery-gate"), el.getAttribute("data-recovery-commit"));
+      });
+    });
+
+    $$("[data-second-wave-id]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        toggleSecondWaveLaunch(el.getAttribute("data-second-wave-type"), el.getAttribute("data-second-wave-id"));
       });
     });
 
