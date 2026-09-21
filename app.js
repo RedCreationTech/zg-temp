@@ -1211,19 +1211,19 @@
       el.addEventListener("click", function () { navigate(el.getAttribute("data-route-jump")); });
     });
 
-    $("[data-patient-flow]").forEach(function (el) {
+    $$("[data-patient-flow]").forEach(function (el) {
       el.addEventListener("click", function () {
         openPatientFlowDetail(Number(el.getAttribute("data-patient-flow")));
       });
     });
 
-    $("[data-stakeholder]").forEach(function (el) {
+    $$("[data-stakeholder]").forEach(function (el) {
       el.addEventListener("click", function () {
         openStakeholderDetail(Number(el.getAttribute("data-stakeholder")));
       });
     });
 
-    $("[data-resource-toggle]").forEach(function (el) {
+    $$("[data-resource-toggle]").forEach(function (el) {
       el.addEventListener("click", function () {
         var i = Number(el.getAttribute("data-resource-toggle"));
         var h = data.hospitals.find(function (x) { return x.id === state.selectedHospital; }) || data.hospitals[0];
@@ -1237,13 +1237,13 @@
       });
     });
 
-    $("[data-resource-review]").forEach(function (el) {
+    $$("[data-resource-review]").forEach(function (el) {
       el.addEventListener("click", function () {
         startAIGeneration("hospital");
       });
     });
 
-    $("[data-prep-check]").forEach(function (el) {
+    $$("[data-prep-check]").forEach(function (el) {
       el.addEventListener("click", function () {
         var i = Number(el.getAttribute("data-prep-check"));
         var docId = state.selectedDoctor;
@@ -1254,7 +1254,7 @@
       });
     });
 
-    $("[data-evidence-index]").forEach(function (el) {
+    $$("[data-evidence-index]").forEach(function (el) {
       el.addEventListener("click", function () {
         openEvidenceTrace(Number(el.getAttribute("data-evidence-index")));
       });
