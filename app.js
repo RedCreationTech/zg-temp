@@ -369,7 +369,7 @@
 
     return '<section class="scenario-section">' +
       '<div class="scenario-heading"><div><span class="eyebrow">DEMO SCENARIO</span><h3>客户演示场景</h3><p>先选一个真实业务故事, 系统会自动切到对应角色、医院、医生和拜访记录.</p></div>' +
-      '<div class="scenario-actions"><button class="btn ghost" data-reset-prototype>重置演示</button><button class="btn primary" data-start-tour><span>▶</span> 开始 7 步演示</button></div></div>' +
+      '<div class="scenario-actions"><button class="btn ghost" data-reset-prototype>重置演示</button><button class="btn primary" data-start-tour><span>▶</span> 开始 8 步演示</button></div></div>' +
       '<div class="scenario-grid">' + cards + '</div>' +
       '<div class="scenario-current"><span>当前故事</span><strong>' + esc(current.name) + '</strong><em>→</em><span>' + esc(current.outcome) + '</span></div>' +
     '</section>';
@@ -468,7 +468,7 @@
     if (next < 0) next = 0;
     if (next >= DEMO_TOUR.length) {
       stopDemoTour();
-      showToast("7 步演示完成");
+      showToast("8 步演示完成");
       return;
     }
     state.demoTourStep = next;
@@ -2823,7 +2823,7 @@
       });
     });
 
-    $("[data-review-route]").forEach(function (el) {
+    $$("[data-review-route]").forEach(function (el) {
       el.addEventListener("click", function (event) {
         event.stopPropagation();
         var route = el.getAttribute("data-review-route");
@@ -2833,24 +2833,24 @@
       });
     });
 
-    $("[data-review-coach]").forEach(function (el) {
+    $$("[data-review-coach]").forEach(function (el) {
       el.addEventListener("click", function () {
         openTeamRepCoaching(el.getAttribute("data-review-coach"), false);
       });
     });
 
-    $("[data-review-generate]").forEach(function (el) {
+    $$("[data-review-generate]").forEach(function (el) {
       el.addEventListener("click", generateManagerReviewPlan);
     });
 
-    $("[data-review-plan]").forEach(function (el) {
+    $$("[data-review-plan]").forEach(function (el) {
       el.addEventListener("click", function (event) {
         if (event.target && event.target.hasAttribute("data-review-route")) return;
         toggleManagerReviewPlan(el.getAttribute("data-review-plan"));
       });
     });
 
-    $("[data-review-adopt-playbook]").forEach(function (el) {
+    $$("[data-review-adopt-playbook]").forEach(function (el) {
       el.addEventListener("click", function () {
         var best = bestTeamPlaybookCandidate();
         if (!best) return;
@@ -2866,11 +2866,11 @@
       });
     });
 
-    $("[data-review-close]").forEach(function (el) {
+    $$("[data-review-close]").forEach(function (el) {
       el.addEventListener("click", closeManagerReview);
     });
 
-    $("[data-reset-agenda]").forEach(function (el) {
+    $$("[data-reset-agenda]").forEach(function (el) {
       el.addEventListener("click", resetCoachingAgenda);
     });
 
