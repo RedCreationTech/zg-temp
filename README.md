@@ -159,7 +159,10 @@ http://localhost:8080
 - Rule 调用次数
 - Human Review
 - 新建 Rule 编辑器
-- 自定义 Rule 保存到 localStorage
+- 自定义 Rule 持久化到 Pilot Runtime
+- 真实 Decision Trace
+- Outcome 回写
+- ContextSnapshot → Decision → NBA → Outcome
 
 ### 8. Pilot Operations
 
@@ -199,33 +202,40 @@ http://localhost:8080
 - 审计
 - SaaS / 私有化 / 混合部署
 
-## Mock API
+## Runtime 与 Decision Engine
 
-当前原型增加了统一的 `mock-api.js`：
+当前版本同时支持两种运行模式。
 
-```text
-generateNBA()
-transcribeVisit()
-saveRule()
-syncCRM()
+### Pilot Server
+
+推荐：
+
+```bash
+npm start
 ```
 
-页面已经按照真实异步接口方式调用。
+访问：
 
-后续接入：
+```text
+http://localhost:8080
+```
 
-- 大模型
-- RAG / 医学知识库
-- CRM / SFE
-- 语音识别
-- Decision Engine
-- Rule Engine
+启用：
 
-时无需重写页面交互。
+- REST API
+- 服务端状态持久化
+- 正式领域模型
+- ContextSnapshot
+- Decision
+- Structured NBA
+- Outcome
+- Decision Rules
+- Organization / RBAC
+- Audit Log
+- CRM Sync 状态
+- Decision Trace
 
-## 运行
-
-当前仍然是零依赖静态原型。
+### Browser Mock
 
 直接打开：
 
@@ -233,17 +243,81 @@ syncCRM()
 index.html
 ```
 
-推荐通过静态服务器：
+系统自动回退到 Browser Mock。
 
-```bash
-python3 -m http.server 8080
-```
+因此客户拜访现场即使没有 Node 环境，也不会影响基础演示。
 
-然后访问：
+### Decision Engine v0.1
+
+当前已经不是固定文本 NBA。
 
 ```text
-http://localhost:8080
+Context Builder
+    ↓
+Decision Rule Retrieval
+    ↓
+Rule Scoring
+    ↓
+Priority Calculation
+    ↓
+Decision
+    ↓
+WHO / WHEN / WHAT / WHY / SUCCESS
+    ↓
+NBA
+    ↓
+Outcome
+    ↓
+Learning Engine
 ```
+
+目前使用 deterministic local engine，目的是优先验证业务判断逻辑和闭环。
+
+后续可在不改变领域对象和 API Schema 的情况下接入：
+
+- OpenAI
+- DeepSeek
+- Qwen
+- Kimi
+- 企业私有模型
+- 医学 RAG
+- CRM / SFE
+
+## 测试
+
+```bash
+npm run check
+npm test
+```
+
+当前测试覆盖：
+
+- Domain Model
+- Hospital Decision
+- Doctor Decision
+- Coaching Decision
+- Director Human Review
+- Outcome Entity
+- Decision Rule Validation
+- Static App
+- Session
+- Action Persistence
+- Structured NBA
+- Decision Trace
+- Outcome Feedback
+- Hospital 360
+- Rule Persistence
+- Organization
+- Audit
+- Bootstrap
+
+GitHub Actions 在 push / pull request 时执行同样的检查。
+
+## 文档
+
+- `docs/C4-ARCHITECTURE.md`
+- `docs/API.md`
+- `docs/DOMAIN-MODEL.md`
 
 ## 推荐演示路径
 
@@ -281,28 +355,57 @@ http://localhost:8080
 ## 技术结构
 
 ```text
-index.html      页面骨架
-styles.css      Design System + 响应式样式
-data.js         脱敏演示数据
-mock-api.js     Mock 后端 / AI / ASR / Rule API
-app.js          页面路由、状态和业务交互
+index.html
+styles.css
+data.js
+mock-api.js
+api-client.js
+app.js
+
+server.js
+lib/
+├── seed-data.js
+├── domain-model.js
+└── decision-engine.js
+
+test/
+├── domain.js
+└── smoke.js
+
+docs/
+├── C4-ARCHITECTURE.md
+├── API.md
+└── DOMAIN-MODEL.md
 ```
+
+运行时：
+
+```text
+.runtime/runtime.json
+```
+
+该文件不会提交 Git，用于本地 Pilot 的服务端持久化。
 
 ## 下一阶段
 
-建议后续进入真正可接客户数据的 MVP：
+v0.4 已经完成 Node API、领域模型、Decision Engine、组织权限、审计和 Outcome 闭环。
 
-1. Vue 3 / React 工程化
-2. Spring Boot / Node API
-3. PostgreSQL
-4. CRM / SFE Connector
-5. 医学知识库与 RAG
-6. OpenAI / 国产模型可切换模型网关
-7. 真实流式 NBA 生成
-8. ASR + 拜访转写
-9. Decision Rule Engine
-10. 用户、组织、辖区和权限模型
-11. 审计与合规工作流
-12. Pilot 指标真实采集
+下一阶段重点不再是继续扩充假页面，而是进入真实客户 Pilot 数据能力：
 
-当前仓库版本重点验证产品方向、信息架构、角色工作流和客户演示体验。
+1. PostgreSQL 替换 runtime.json
+2. Hospital / Doctor / Visit Repository
+3. Action 正式实体与 NBA Accept 流程
+4. Outcome 与 Action 自动关联
+5. Decision Rule Validator
+6. Rule Versioning / Human Review
+7. CRM / SFE Connector
+8. 医学知识库 / Evidence Service
+9. 真实 ASR
+10. Model Gateway
+11. Structured LLM Decision Pipeline
+12. Pilot Metric 自动采集
+13. Enterprise SSO / OIDC
+14. Region / Territory 数据隔离
+15. 不可篡改 Audit Trail
+
+当前仓库已经从“客户演示页面”进入“可继续接真实数据的 Pilot MVP 骨架”阶段。
