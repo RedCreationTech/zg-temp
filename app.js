@@ -561,6 +561,7 @@
 
     return '<div class="page-banner"><div><span class="banner-kicker">HOSPITAL AGENT</span><h2>医院下一步行动导航</h2><p>从患者流、患者旅程与医院生态中筛出 Top 1–3 杠杆点, 让地区经理不再平均用力.</p></div><div class="banner-side"><strong>' + h.opportunity + '</strong><span>机会指数 / 100</span></div></div>' +
       '<div class="filter-bar"><select class="select-box" id="hospitalSelect">' + options + '</select><div class="filter-group"><span class="soft-chip">' + esc(h.tier) + '</span><span class="date-chip">' + esc(h.product) + '</span><span class="date-chip">本季度</span></div></div>' +
+      renderManagementSignal(managementForHospital(h.id), "医院资源") +
       '<div class="metric-grid">' +
         metric("医院机会指数", h.opportunity, "综合业务影响与患者价值", "+6", "机") +
         metric("可改变程度", h.changeability + "%", "当前资源可以直接影响", "+9%", "改") +
@@ -598,6 +599,7 @@
     }).join("");
 
     return '<div class="page-banner"><div><span class="banner-kicker">DOCTOR AGENT</span><h2>医生下一步行动导航</h2><p>不是生成一段话术, 而是结合医院目标、医生画像、关键时机和证据, 判断“这一次最应该推进什么”.</p></div><div class="banner-side"><strong>' + doc.nextScore + '</strong><span>行动优先分 / 100</span></div></div>' +
+      renderManagementSignal(managementForDoctor(doc), "医生推进") +
       '<div class="doctor-layout">' +
         panel("重点医生", "按下一步行动优先级排序", '<div class="doctor-list">' + list + '</div>') +
         '<div class="stack">' +
@@ -656,6 +658,7 @@
 
     return '<div class="page-banner"><div><span class="banner-kicker">VISIT COACHING AGENT</span><h2>从一次真实拜访到下一次行动提升</h2><p>经理不再只给经验反馈. 系统还原发生了什么、诊断真正卡点、替换关键句, 并把改进带入下一次拜访.</p></div><div class="banner-side"><strong>' + v.score + '</strong><span>本次拜访质量 / 100</span></div></div>' +
       '<div class="filter-bar"><select class="select-box" id="visitSelect">' + visitOptions + '</select><div class="filter-group"><span class="status ' + (v.severity === "高" ? "risk" : "done") + '">' + esc(v.severity) + '优先级</span><span class="date-chip">' + esc(v.hospital) + '</span></div></div>' +
+      renderManagementSignal(managementForVisit(v.id), "经理辅导") +
       '<div class="grid-2">' +
         panel("拜访质量诊断", v.rep + ' → ' + v.doctor + ' · ' + v.time,
           '<div class="coaching-score"><div class="score-ring" style="background:conic-gradient(#5879df 0 ' + v.score + '%,#e8edf5 ' + v.score + '% 100%)"><div><strong>' + v.score + '</strong><span>综合得分</span></div></div><div>' + dims + '</div></div>'
@@ -848,6 +851,25 @@
           '<div class="insight-card"><div class="insight-head"><strong>FACT</strong><span class="insight-tag">可追溯</span></div><p>真实行动、医生反馈、业务里程碑、知识证据.</p></div><div class="insight-card"><div class="insight-head"><strong>INFERENCE</strong><span class="insight-tag">需验证</span></div><p>Agent 对情境、优先级、因果关系的推断必须带置信度和验证计划.</p></div><div class="insight-card"><div class="insight-head"><strong>HUMAN REVIEW</strong><span class="insight-tag">关键门槛</span></div><p>高风险 NBA、医学边界和规则正式发布必须经过授权角色审核.</p></div>'
         ) +
       '</div>';
+  }
+
+  function renderManagementSignal(items, contextLabel) {
+    if (!items || !items.length) return "";
+    var html = items.map(function (item) {
+      var meta = MANAGEMENT_ACTIONS[item.decision] || {};
+      return '<div class="management-signal ' + esc(meta.tone || '') + '"><div><span>DIRECTOR DECISION · ' + esc(contextLabel || "管理层") + '</span><strong>' + esc(managementLabel(item.decision)) + ' · ' + esc(item.risk.object) + '</strong><p>' + esc(item.risk.action) + '</p></div><button class="tiny-btn" data-route-jump="cockpit">查看总监决策</button></div>';
+    }).join("");
+    return '<div class="management-signal-wrap">' + html + '</div>';
+  }
+
+  function managementForDoctor(doc) {
+    var ids = [];
+    if (doc.id === "d1") ids = ["m1"];
+    if (doc.id === "d2") ids = ["m2"];
+    if (doc.id === "d3") ids = ["m4"];
+    return ids.filter(function (id) { return state.managementDecisions[id]; }).map(function (id) {
+      return { risk: data.risks.find(function (r) { return r.id === id; }), decision: state.managementDecisions[id] };
+    }).filter(function (x) { return x.risk; });
   }
 
   function renderPatientFlow(h) {
@@ -1440,10 +1462,13 @@
         var h = data.hospitals.find(function (x) { return x.id === state.selectedHospital; }) || data.hospitals[0];
         var r = h.resources && h.resources[i];
         if (!r) return;
+        var current = resourceStatus(h.id, r);
         var order = ["planned","ready","doing"];
-        var idx = order.indexOf(r.status);
-        r.status = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : (r.status === "hold" ? "planned" : "ready");
-        showToast(r.item + " · " + ({ ready: "已就绪", doing: "执行中", planned: "计划中" }[r.status] || r.status));
+        var idx = order.indexOf(current);
+        var next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : (current === "hold" ? "planned" : "ready");
+        state.resourceOverrides[h.id + ":" + r.id] = next;
+        saveState();
+        showToast(r.item + " · " + ({ ready: "已就绪", doing: "执行中", planned: "计划中", hold: "暂缓" }[next] || next));
         render();
       });
     });
@@ -1495,7 +1520,46 @@
       el.addEventListener("click", function () { openCustom(el.getAttribute("data-custom-action")); });
     });
 
-    $$("[data-risk]").forEach(function (el) {
+    $("[data-management-decision]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        applyManagementDecision(el.getAttribute("data-management-risk"), el.getAttribute("data-management-decision"));
+      });
+    });
+
+    $("[data-management-clear]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        clearManagementDecision(el.getAttribute("data-management-clear"));
+      });
+    });
+
+    $("[data-pilot-week]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.pilotWeek = Number(el.getAttribute("data-pilot-week"));
+        saveState();
+        render();
+        showToast("Pilot 已切换到 W" + state.pilotWeek);
+      });
+    });
+
+    $("[data-pilot-next]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (state.pilotWeek < 8) state.pilotWeek += 1;
+        saveState();
+        render();
+        showToast("Pilot 推进到 W" + state.pilotWeek);
+      });
+    });
+
+    $("[data-pilot-prev]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (state.pilotWeek > 1) state.pilotWeek -= 1;
+        saveState();
+        render();
+        showToast("Pilot 回到 W" + state.pilotWeek);
+      });
+    });
+
+    $("[data-risk]").forEach(function (el) {
       el.addEventListener("click", function () {
         openCustom("risk", el.getAttribute("data-risk"));
       });
