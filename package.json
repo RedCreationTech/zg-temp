@@ -1,12 +1,12 @@
 {
   "name": "zg-ai-gps-prototype",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "ZG Pharma Sales AI GPS - System of Action prototype and pilot runtime",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check": "node --check server.js && node --check lib/domain-model.js && node --check lib/decision-engine.js && node --check lib/seed-data.js",
+    "check": "node --check server.js && node --check lib/domain-model.js && node --check lib/decision-engine.js && node --check lib/learning-engine.js && node --check lib/seed-data.js",
     "test": "node test/domain.js && node test/smoke.js"
   },
   "engines": {
