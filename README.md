@@ -623,6 +623,195 @@ AI 四轮模拟结果
 
 因此完成陪练后，团队能力画像和辅导优先级会随前端状态变化。
 
+## 本轮 Scale Operations Cockpit
+
+Scale Execution 进一步增加运营层闭环。
+
+现在 Day 30 / 60 / 90 Gate Review 不再只是：
+
+```text
+通过 / 有条件通过 / 暂缓
+```
+
+而是继续形成：
+
+```text
+Gate Review
+↓
+会议摘要
+↓
+恢复计划
+↓
+Owner 承诺
+↓
+下一阶段执行
+```
+
+### Gate Review 会议摘要
+
+完成 Gate Review 后可以生成：
+
+```text
+MEETING SUMMARY
+```
+
+摘要自动包含：
+
+- Gate 结论
+- 当前阶段完成度
+- 已完成任务数
+- 未完成事项
+- 当前风险数量
+- 最慢 Owner
+- 核心风险
+- 下一阶段动作
+
+因此 Gate Review 不再只是一个状态标签。
+
+### 恢复计划
+
+如果 Gate 选择：
+
+```text
+暂缓
+或
+有条件通过
+```
+
+可以生成恢复计划。
+
+系统会从当前阶段未完成任务 / 风险中自动生成：
+
+- Owner
+- 恢复 Action
+- Success Evidence
+- Due Day
+
+默认恢复窗口：
+
+```text
+7 天
+```
+
+### Owner Commitment
+
+恢复计划每一项都需要 Owner 明确确认。
+
+点击恢复项以后：
+
+```text
+□ 未承诺
+→
+✓ 已承诺
+```
+
+Scale Operations Cockpit 会显示：
+
+```text
+恢复承诺
+2 / 3
+```
+
+这样“有条件通过”不会变成一句空话。
+
+### Scale Operations Cockpit
+
+执行页顶部新增：
+
+```text
+SCALE OPERATIONS COCKPIT
+```
+
+核心指标：
+
+- 总执行进度
+- 计划偏差
+- 风险 / 延期
+- 恢复承诺
+- 第二批启动
+
+并显示三个阶段：
+
+```text
+Launch
+→
+Value
+→
+Repeatability
+```
+
+每个阶段展示：
+
+- 进行中
+- 待解锁
+- Gate Review 结果
+
+### 第二批实际启动
+
+Day 30 Gate 解锁以后，第二批不再只是候选列表。
+
+每一家候选医院、每一名候选代表都可以单独点击：
+
+```text
+启动医院
+启动代表
+```
+
+启动后显示：
+
+```text
+✓ 已启动
+```
+
+Operations Cockpit 会汇总：
+
+```text
+第二批启动
+3 / 5
+```
+
+因此当前流程变成：
+
+```text
+Day 30 Gate
+↓
+第二批 UNLOCKED
+↓
+逐个启动医院 / 代表
+↓
+Operations Cockpit
+↓
+Day 60 Value Gate
+```
+
+### 当前最终运营链
+
+```text
+Scale Gate
+↓
+Scale Execution Plan
+↓
+计划 vs 实际
+↓
+Owner Progress
+↓
+Risk / Delay
+↓
+Gate Review
+↓
+Meeting Summary
+↓
+Recovery Plan
+↓
+Owner Commitment
+↓
+Second Wave Launch
+↓
+Scale Operations Cockpit
+↓
+Day 60 / Day 90 Review
+```
+
 ## 本轮 Scale Execution 驾驶舱增强
 
 Scale Execution Plan 现在进一步升级为执行驾驶舱，而不是静态 90 天计划。
