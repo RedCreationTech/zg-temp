@@ -80,6 +80,9 @@
     repSelectedVisit: saved.repSelectedVisit || "rv2",
     repQuickTasks: saved.repQuickTasks || {},
     liveVisitSessions: saved.liveVisitSessions || {},
+    audioReviews: saved.audioReviews || {},
+    reviewSessions: saved.reviewSessions || {},
+    roleplaySessions: saved.roleplaySessions || {},
     liveVisitTab: "evidence",
     coachingTab: "review",
     actionFilter: "all",
@@ -120,6 +123,9 @@
       repSelectedVisit: state.repSelectedVisit,
       repQuickTasks: state.repQuickTasks,
       liveVisitSessions: state.liveVisitSessions,
+      audioReviews: state.audioReviews,
+      reviewSessions: state.reviewSessions,
+      roleplaySessions: state.roleplaySessions,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -833,6 +839,119 @@
       '<div class="drawer-section"><h4>FACT / INFERENCE</h4><div class="drawer-success"><span>FACT</span><span>该证据作为专业沟通依据时必须保留原始来源、版本和适用边界. Agent 生成的话术属于 INFERENCE, 不能改变证据原意.</span></div></div>' +
       '<div class="drawer-section"><h4>当前医生为什么看到它</h4><p class="small-note">' + esc(doc.name) + ' 当前关注 “' + esc(doc.focus) + '”, 系统仅把与当前触发场景直接相关的已审核证据排到前面.</p></div>';
     openDrawer(e[1], body, null);
+  }
+
+  function coachingReviewSession(visitId) {
+    if (!state.reviewSessions[visitId]) {
+      state.reviewSessions[visitId] = {
+        generated: false,
+        issueAccepted: false,
+        nextActionAccepted: false,
+        completed: false
+      };
+    }
+    return state.reviewSessions[visitId];
+  }
+
+  function coachingRoleplaySession(visitId) {
+    if (!state.roleplaySessions[visitId]) {
+      state.roleplaySessions[visitId] = {
+        attempts: [],
+        lastChoice: null,
+        lastScore: null,
+        completed: false
+      };
+    }
+    return state.roleplaySessions[visitId];
+  }
+
+  function roleplayConfig(v) {
+    if (v.issue === "推进不够") {
+      return {
+        doctor: "这几个病例挺有意思的, 我回头再看看.",
+        target: "把模糊兴趣推进成一个有时间、有对象的明确承诺.",
+        choices: [
+          { text: "好的, 您有空再看看, 我下次再来.", score: 38, feedback: "延续了本次失效点. 没有病例、没有时间、没有客户行为.", reply: "好, 有需要再联系." },
+          { text: "下次住院组讨论时, 我们能不能一起判断 1 例边界患者? 我周四下午把病例卡带过来.", score: 94, feedback: "把兴趣转成了具体病例、具体场景和具体时间, 可以验证是否真正推进.", reply: "可以, 周四下午你带过来, 我们选一例看看." },
+          { text: "我再给您发几篇资料, 都是比较新的研究.", score: 57, feedback: "增加了内容, 但没有改变医生下一步行为.", reply: "可以发我邮箱, 我有空看看." }
+        ]
+      };
+    }
+    if (v.issue === "可复制经验") {
+      return {
+        doctor: "这个流程问题确实一直存在, 你说的病例讨论方式可以试试.",
+        target: "复制有效结构, 把认可锁定成病例会日期、人员和病例.",
+        choices: [
+          { text: "太好了, 那我回去再准备完整一些, 下次来详细讲.", score: 61, feedback: "方向正确但又把承诺推迟了, 没有锁定本次已经出现的机会.", reply: "好, 你下次准备好了再说." },
+          { text: "那我们把它定下来: 下周病例会留 20 分钟, 您看周二还是周四更合适? 我们只准备 3 个典型病例.", score: 96, feedback: "把正向意愿变成日期、时长和具体内容, 是可追踪的下一步.", reply: "周四吧, 你先和秘书确认一下时间." },
+          { text: "我们产品其实还有很多优势, 我可以再系统介绍一下.", score: 44, feedback: "从客户流程问题又滑回产品介绍, 丢掉了当前最有价值的 Context.", reply: "产品资料我之前已经看过了." }
+        ]
+      };
+    }
+    return {
+      doctor: "数据我看过一些, 但我现在更关心这类患者到底怎么选.",
+      target: "先确认医生的真实决策标准, 再决定调用哪条证据.",
+      choices: [
+        { text: "我们这组真实世界数据纳入了很多高风险患者, 长期结果也比较完整.", score: 52, feedback: "仍然在继续呈现证据, 没有回应医生正在提出的“怎么选”这个决策问题.", reply: "我的问题还是哪些患者值得现在就调整方案." },
+        { text: "您判断这类患者时, 现在最看重哪两个指标? 是长期风险、既往事件, 还是当前控制情况?", score: 93, feedback: "先补 Context, 让后续证据可以精准绑定医生的决策标准.", reply: "我主要看既往事件和长期风险, 但安全性我也比较在意." },
+        { text: "指南其实对这类患者已经有比较明确的推荐.", score: 63, feedback: "比继续讲研究更接近决策, 但仍然没有先确认医生自己的判断标准.", reply: "指南我知道, 但实际患者没有那么标准." }
+      ]
+    };
+  }
+
+  function renderThreeMinuteReview(v, liveSession) {
+    var review = coachingReviewSession(v.id);
+    var audio = state.audioReviews[v.id];
+    var fieldNote = liveSession && liveSession.notes && liveSession.notes.length ? liveSession.notes[liveSession.notes.length - 1] : "";
+    var commitment = liveSession && liveSession.commitment ? liveSession.commitment : "";
+    var generated = review.generated && audio;
+    var summaryBody = generated
+      ? '<div class="review-summary-grid"><div class="review-summary-card"><span>本次目标</span><strong>' + esc(commitment || "推进一个明确的客户下一步行为") + '</strong></div><div class="review-summary-card"><span>客户关键信号</span><strong>' + esc(fieldNote || audio.diagnosis.evidence) + '</strong></div><div class="review-summary-card critical"><span>TOP 1 改进点</span><strong>' + esc(v.issue) + '</strong></div><div class="review-summary-card"><span>下一次动作</span><strong>' + esc(v.nextScript) + '</strong></div></div>'
+      : '<div class="review-empty"><div class="review-mic">REC</div><div><strong>生成 3 分钟复盘</strong><p>原型会模拟语音转写、摘要、评分和 Top 1 问题识别.</p></div><button class="btn primary" data-start-three-review>使用演示录音生成</button></div>';
+
+    var steps = [
+      ["00:00–00:45","自动摘要",generated],
+      ["00:45–01:30","Top 1 诊断",generated],
+      ["01:30–02:30","AI 陪练",coachingRoleplaySession(v.id).attempts.length > 0],
+      ["02:30–03:00","确认下一步",coachingRoleplaySession(v.id).completed]
+    ].map(function(s){
+      return '<div class="review-step ' + (s[2] ? "done" : "") + '"><span>' + (s[2] ? "✓" : "") + '</span><div><b>' + esc(s[0]) + '</b><strong>' + esc(s[1]) + '</strong></div></div>';
+    }).join('<div class="review-step-arrow">→</div>');
+
+    return panel("拜访后 3 分钟复盘", "不写长报告, 只保留影响下一次行动的事实、问题和改进",
+      '<div class="review-timeline">' + steps + '</div>' + summaryBody +
+      (generated ? '<div class="review-next"><span>AI 诊断</span><strong>' + esc(audio.diagnosis.topIssue) + ' · ' + esc(audio.diagnosis.score) + ' 分</strong><p>' + esc(audio.diagnosis.nextAction) + '</p><button class="btn soft" data-review-accept-issue>' + (review.issueAccepted ? "✓ 已确认首要问题" : "确认首要问题并开始陪练") + '</button></div>' : '')
+    );
+  }
+
+  function renderRoleplay(v) {
+    var review = coachingReviewSession(v.id);
+    var session = coachingRoleplaySession(v.id);
+    if (!review.issueAccepted) {
+      return panel("AI 角色扮演", "先完成 3 分钟复盘并确认首要问题",
+        '<div class="roleplay-locked"><span>LOCKED</span><strong>确认 Top 1 改进点后开始陪练</strong><p>每轮只练一个行为, 避免把辅导变成一长串建议.</p></div>'
+      );
+    }
+
+    var config = roleplayConfig(v);
+    var last = session.lastChoice != null ? config.choices[session.lastChoice] : null;
+    var attempts = session.attempts.length;
+    var best = session.attempts.reduce(function(max,a){return Math.max(max,Number(a.score||0));},0);
+
+    var choices = config.choices.map(function(choice,i){
+      return '<button class="roleplay-choice ' + (session.lastChoice === i ? "selected" : "") + '" data-roleplay-choice="' + i + '"><span>' + String.fromCharCode(65+i) + '</span><p>' + esc(choice.text) + '</p></button>';
+    }).join("");
+
+    var result = last
+      ? '<div class="roleplay-result ' + (last.score >= 85 ? "good" : (last.score >= 65 ? "mid" : "bad")) + '"><div class="roleplay-score"><strong>' + last.score + '</strong><span>本轮得分</span></div><div><span>医生回应</span><p>“' + esc(last.reply) + '”</p><b>' + esc(last.feedback) + '</b></div></div>'
+      : '<div class="roleplay-hint">选择一句你准备现场说的话, AI 会模拟医生回应并立即评分.</div>';
+
+    return panel("AI 角色扮演", "医生由 AI 模拟, 只练本次 Top 1 问题: " + v.issue,
+      '<div class="roleplay-head"><div><span>DOCTOR</span><strong>“' + esc(config.doctor) + '”</strong><p>训练目标: ' + esc(config.target) + '</p></div><div class="roleplay-stats"><span>已练 ' + attempts + ' 轮</span><strong>Best ' + best + '</strong></div></div>' +
+      '<div class="roleplay-choices">' + choices + '</div>' +
+      result +
+      (last ? '<div class="roleplay-actions"><button class="btn ghost" data-roleplay-retry>再打一遍</button><button class="btn primary" data-roleplay-complete ' + (best < 85 ? "disabled" : "") + '>' + (session.completed ? "✓ 陪练已完成" : "完成陪练, 锁定下一次打法") + '</button></div>' : '')
+    );
   }
 
   function renderCoaching() {
