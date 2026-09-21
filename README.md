@@ -107,7 +107,89 @@ Doctor Agent 增加拜访前准备工作台：
 
 支持点击行动并模拟完成状态。
 
-### 2. Hospital Agent
+### 2. 医药代表工作台
+
+代表工作台把 Doctor Agent 的判断能力放进代表每天真正使用的工作流程。
+
+首页展示：
+
+- 今日 4 次客户互动
+- 拜访时间
+- 医生 / 医院 / 科室
+- 本次唯一目的
+- 优先级
+- 行程提示
+- 当前状态
+- 3 个 Agent 提醒的小任务
+
+选择下一场拜访后，右侧自动生成：
+
+```text
+本次唯一目标
+WHY NOW
+当前 GAP
+开场策略
+结束承诺
+TOP EVIDENCE
+拜访准备完成度
+```
+
+可以继续进入：
+
+```text
+代表工作台
+→ Doctor Agent
+→ 拜访前准备
+→ 拜访中模式
+```
+
+#### 拜访中模式
+
+现场模式刻意减少普通看板信息，只留下当前拜访真正需要的内容：
+
+```text
+当前目标
+成功信号
+先问什么
+证据
+异议
+下一步承诺
+合规提醒
+```
+
+代表可以在 3 个现场 Tab 之间切换：
+
+1. 证据
+2. 异议
+3. 承诺
+
+证据页用于模拟“3 秒找证据”。
+
+异议页用于选择医生当前异议，并展示建议应对方向。
+
+承诺页要求代表在结束拜访前明确一个可验证的下一步，例如：
+
+```text
+周三 MDT 讨论 1 例匹配患者
+确认病例共识会日期
+确认下一次病例讨论时间
+升级经理 / 医学支持
+```
+
+没有明确承诺时，“形成承诺并结束”按钮不可完成。
+
+拜访结束后：
+
+```text
+现场承诺
+→ 客户原话 / 现场信号
+→ 进入拜访复盘
+→ Coaching Agent
+```
+
+经理辅导页会显示代表刚刚从现场回传的承诺和记录，实现角色之间的前端联动。
+
+### 3. Hospital Agent
 
 围绕“这家医院下一步最值得打哪里”展示：
 
@@ -124,7 +206,7 @@ Doctor Agent 增加拜访前准备工作台：
 - WHO / WHEN / WHAT / WHY / SUCCESS
 - AI 生成本周行动计划
 
-### 3. Doctor Agent
+### 4. Doctor Agent
 
 围绕“这个医生，这一次，下一步做什么”展示：
 
@@ -149,7 +231,7 @@ Doctor Agent 增加拜访前准备工作台：
 - FACT / INFERENCE 边界
 - AI 生成医生 NBA
 
-### 4. Visit Coaching Agent
+### 5. Visit Coaching Agent
 
 围绕一次真实拜访复盘展示：
 
@@ -266,7 +348,7 @@ Pilot Operations 的核心指标已经改为随当前前端状态动态计算，
 → 是否扩展
 ```
 
-### 5. Director Decision Cockpit
+### 6. Director Decision Cockpit
 
 围绕管理层的五个问题：
 
@@ -289,7 +371,7 @@ Pilot Operations 的核心指标已经改为随当前前端状态动态计算，
 - 决策反向联动 Hospital / Doctor / Coaching
 - Action → Outcome
 
-### 6. Pilot Operations
+### 7. Pilot Operations
 
 模拟 8 周付费 Pilot：
 
@@ -313,7 +395,7 @@ W8 价值评估
 - Product Proof
 - Scale Readiness
 
-### 7. Learning Engine
+### 8. Learning Engine
 
 用于演示：
 
@@ -338,7 +420,7 @@ Context
 
 全部为前端模拟。
 
-### 8. Enterprise Guardrails
+### 9. Enterprise Guardrails
 
 展示企业级要求：
 
@@ -352,7 +434,7 @@ Context
 - 审计
 - SaaS / 私有化 / 混合部署概念
 
-### 9. Organization & Access
+### 10. Organization & Access
 
 展示：
 
