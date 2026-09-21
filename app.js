@@ -6,6 +6,8 @@
   var STORAGE_KEY = "zg-ai-gps-demo-v1";
   var titles = {
     dashboard: "今日行动",
+    rep: "代表工作台",
+    visitlive: "拜访中",
     hospital: "医院作战",
     doctor: "医生导航",
     coaching: "拜访辅导",
@@ -55,7 +57,7 @@
   var DEMO_TOUR = [
     { role: "地区经理", route: "dashboard", kicker: "01 / ACTION", title: "先看今天真正值得做什么", desc: "AI GPS 不是把数据再展示一遍, 而是把医院、医生和拜访信号收敛成少数高优先 NBA." },
     { role: "地区经理", route: "hospital", kicker: "02 / HOSPITAL", title: "找到医院最值得打的业务杠杆", desc: "从机会价值和可改变程度出发, 避免平均投入, 形成 WHO / WHEN / WHAT / SUCCESS." },
-    { role: "医药代表", route: "doctor", kicker: "03 / DOCTOR", title: "把医院策略落到一次医生行动", desc: "围绕真实触发场景判断为什么现在打、说什么、怎么推进以及目标行为." },
+    { role: "医药代表", route: "rep", kicker: "03 / REPRESENTATIVE", title: "代表今天怎么真正使用 AI GPS", desc: "从今天拜访谁开始, 完成准备、证据调用、异议应对和下一步承诺." },
     { role: "地区经理", route: "coaching", kicker: "04 / COACHING", title: "复盘一次失效拜访并替换关键动作", desc: "经理看到的不只是评分, 而是下一次拜访具体要改哪句话、检查什么证据." },
     { role: "销售总监", route: "cockpit", kicker: "05 / MANAGEMENT", title: "管理层只处理真正需要介入的动作", desc: "加资源、纠偏、升级或停止, 而不是月底再看一张结果报表." },
     { role: "销售总监", route: "learning", kicker: "06 / LEARNING", title: "让真实 Outcome 回流为组织判断能力", desc: "有效和无效动作形成 RuleValidation, 高风险规则仍保留 Human Review." },
@@ -75,6 +77,10 @@
     selectedHospital: saved.selectedHospital || "h1",
     selectedDoctor: saved.selectedDoctor || "d1",
     selectedVisit: saved.selectedVisit || "v1",
+    repSelectedVisit: saved.repSelectedVisit || "rv2",
+    repQuickTasks: saved.repQuickTasks || {},
+    liveVisitSessions: saved.liveVisitSessions || {},
+    liveVisitTab: "evidence",
     coachingTab: "review",
     actionFilter: "all",
     selectedAction: null,
@@ -111,6 +117,9 @@
       selectedHospital: state.selectedHospital,
       selectedDoctor: state.selectedDoctor,
       selectedVisit: state.selectedVisit,
+      repSelectedVisit: state.repSelectedVisit,
+      repQuickTasks: state.repQuickTasks,
+      liveVisitSessions: state.liveVisitSessions,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -603,6 +612,156 @@
         panel("作战闭环", "目标: " + h.target, timeline) +
       '</div>' +
       '<div class="grid-equal mt-16"><div>' + renderHospitalEcology(h) + '</div><div>' + renderResourcePlan(h) + '</div></div>';
+  }
+
+  function repVisitById(id) {
+    return (data.repDay && data.repDay.visits || []).find(function (x) { return x.id === id; }) || (data.repDay && data.repDay.visits && data.repDay.visits[0]);
+  }
+
+  function syncRepVisitSelection(visit) {
+    if (!visit) return;
+    state.repSelectedVisit = visit.id;
+    state.selectedDoctor = visit.doctorId;
+    state.selectedHospital = visit.hospitalId;
+    if (visit.id === "rv1" || visit.id === "rv4") state.selectedVisit = "v2";
+    else if (visit.id === "rv2") state.selectedVisit = "v1";
+    else if (visit.id === "rv3") state.selectedVisit = "v3";
+  }
+
+  function renderRepSchedule() {
+    var selected = repVisitById(state.repSelectedVisit);
+    var visits = (data.repDay && data.repDay.visits || []).map(function (v) {
+      var statusText = { done: "已完成", next: "下一场", planned: "待拜访" }[v.status] || v.status;
+      var statusClass = v.status === "done" ? "done" : (v.status === "next" ? "doing" : "todo");
+      return '<button class="rep-visit-card ' + (selected && selected.id === v.id ? "active" : "") + '" data-rep-visit="' + v.id + '">' +
+        '<div class="rep-time"><strong>' + esc(v.time) + '</strong><span>' + esc(v.type) + '</span></div>' +
+        '<div class="rep-visit-main"><div><strong>' + esc(v.doctor) + '</strong><span>' + esc(v.hospital.replace("华东大学附属第一医院","华东附一")) + ' · ' + esc(v.department) + '</span></div><p>' + esc(v.purpose) + '</p></div>' +
+        '<div class="rep-visit-state"><span class="status ' + statusClass + '">' + esc(statusText) + '</span><small>' + esc(v.travel) + '</small></div>' +
+      '</button>';
+    }).join("");
+    return '<div class="rep-schedule">' + visits + '</div>';
+  }
+
+  function renderRepSelectedVisit() {
+    var visit = repVisitById(state.repSelectedVisit);
+    if (!visit) return "";
+    var doc = data.doctors.find(function (x) { return x.id === visit.doctorId; }) || data.doctors[0];
+    var p = doc.preVisit || {};
+    var doneMap = state.prepStatus[doc.id] || {};
+    var doneCount = Object.keys(doneMap).filter(function (k) { return doneMap[k]; }).length;
+    var total = (p.checklist || []).length || 5;
+    var ready = doneCount >= Math.max(3,total - 1);
+    var evidence = (doc.evidence || []).slice(0,2).map(function (e) {
+      return '<div class="rep-mini-evidence"><b>' + esc(e[0]) + '</b><div><strong>' + esc(e[1]) + '</strong><span>' + esc(e[2]) + '</span></div></div>';
+    }).join("");
+    return '<div class="rep-selected">' +
+      '<div class="rep-selected-head"><div><span class="eyebrow">NEXT VISIT · ' + esc(visit.time) + '</span><h2>' + esc(visit.doctor) + ' · ' + esc(visit.department) + '</h2><p>' + esc(visit.hospital) + ' · ' + esc(visit.type) + '</p></div><div class="visit-readiness ' + (ready ? "ready" : "") + '"><strong>' + doneCount + '/' + total + '</strong><span>准备完成</span></div></div>' +
+      '<div class="rep-objective"><span>THIS VISIT OBJECTIVE</span><strong>' + esc(p.objective || visit.purpose) + '</strong><p>成功信号: ' + esc(visit.success) + '</p></div>' +
+      '<div class="rep-work-grid"><div class="rep-work-card"><span>WHY NOW</span><strong>' + esc(doc.trigger) + '</strong></div><div class="rep-work-card"><span>当前 GAP</span><strong>' + esc(doc.gap) + '</strong></div><div class="rep-work-card"><span>开场策略</span><strong>' + esc(p.opening || "") + '</strong></div><div class="rep-work-card"><span>结束承诺</span><strong>' + esc(p.commitment || "") + '</strong></div></div>' +
+      '<div class="rep-evidence-row"><div><span class="eyebrow">TOP EVIDENCE</span>' + evidence + '</div></div>' +
+      '<div class="rep-actions"><button class="btn ghost" data-rep-open-doctor>打开 Doctor Agent</button><button class="btn soft" data-rep-prepare>继续拜访准备</button><button class="btn primary" data-rep-start-visit>进入拜访中模式</button></div>' +
+    '</div>';
+  }
+
+  function renderRepQuickTasks() {
+    var items = (data.repDay && data.repDay.quickTasks || []).map(function (t) {
+      var done = !!state.repQuickTasks[t.id];
+      return '<button class="rep-task ' + (done ? "done" : "") + '" data-rep-task="' + t.id + '"><span class="prep-box">' + (done ? "✓" : "") + '</span><div><strong>' + esc(t.title) + '</strong><small>' + esc(t.source) + '</small></div></button>';
+    }).join("");
+    return panel("今天别漏掉", "Agent 自动收敛出的 3 个小动作", '<div class="rep-task-list">' + items + '</div>');
+  }
+
+  function renderRep() {
+    var selected = repVisitById(state.repSelectedVisit);
+    if (!selected && data.repDay && data.repDay.visits && data.repDay.visits[0]) {
+      selected = data.repDay.visits[0];
+      syncRepVisitSelection(selected);
+    }
+    var completed = (data.repDay.visits || []).filter(function (v) { return v.status === "done"; }).length;
+    return '<div class="page-banner rep-banner"><div><span class="banner-kicker">REPRESENTATIVE WORKSPACE</span><h2>今天不是“拜访 4 个医生”, 而是推进 4 个明确动作</h2><p>' + esc(data.repDay.summary) + '</p></div><div class="banner-side"><strong>' + completed + '/4</strong><span>今日互动已完成</span></div></div>' +
+      '<div class="metric-grid">' +
+        metric("今日客户互动","4","2 次高优先","", "访") +
+        metric("需要明确承诺","2","周敏 MDT / 王静病例会","重点","诺") +
+        metric("拜访前准备", selected ? ((Object.keys(state.prepStatus[selected.doctorId] || {}).filter(function(k){return state.prepStatus[selected.doctorId][k];}).length) + "/5") : "0/5","下一场拜访","", "备") +
+        metric("经理辅导提醒","1","最近一次推进不足","需处理","辅") +
+      '</div>' +
+      '<div class="rep-layout">' +
+        '<div class="stack">' +
+          panel("今日路线", "按下一步行动优先级排列, 不按客户名单平均覆盖", renderRepSchedule()) +
+          renderRepQuickTasks() +
+        '</div>' +
+        '<div>' + renderRepSelectedVisit() + '</div>' +
+      '</div>';
+  }
+
+  function liveVisitSession() {
+    var visit = repVisitById(state.repSelectedVisit);
+    if (!visit) return null;
+    if (!state.liveVisitSessions[visit.id]) {
+      state.liveVisitSessions[visit.id] = { objection: "", commitment: "", notes: [], started: false, ended: false };
+    }
+    return state.liveVisitSessions[visit.id];
+  }
+
+  function renderLiveEvidence(doc) {
+    return '<div class="live-evidence-list">' + (doc.evidence || []).map(function (e,i) {
+      return '<button class="live-evidence-card" data-live-evidence="' + i + '"><div class="evidence-icon">' + esc(e[0]) + '</div><div><strong>' + esc(e[1]) + '</strong><span>' + esc(e[2]) + '</span></div><em>调用</em></button>';
+    }).join("") + '</div>';
+  }
+
+  function renderLiveObjections(doc, session) {
+    var objections = (doc.preVisit && doc.preVisit.objections || []).concat(["我现在没有时间看这么多资料","我们目前的方案已经比较稳定"]);
+    return '<div class="live-objection-grid">' + objections.map(function (o,i) {
+      return '<button class="live-objection ' + (session.objection === o ? "active" : "") + '" data-live-objection="' + i + '" data-objection-text="' + esc(o) + '"><span>医生可能说</span><strong>' + esc(o) + '</strong><p>' + esc(i === 0 ? "先确认具体决策标准, 再只调用与标准直接相关的一条证据." : "先认可当前做法, 再用一个真实病例讨论是否存在边界患者.") + '</p></button>';
+    }).join("") + '</div>';
+  }
+
+  function renderLiveCommitment(doc, visit, session) {
+    var options = [
+      visit.success,
+      doc.preVisit && doc.preVisit.commitment,
+      "确认下一次沟通的具体日期与病例",
+      "需要经理 / 医学支持后再推进"
+    ].filter(Boolean);
+    return '<div class="live-commitment"><span class="eyebrow">NEXT COMMITMENT</span><h3>这次拜访结束前, 必须明确下一步是什么</h3><div class="commitment-options">' + options.map(function (o,i) {
+      return '<button class="commitment-option ' + (session.commitment === o ? "active" : "") + '" data-live-commitment="' + i + '" data-commitment-text="' + esc(o) + '"><span>' + (session.commitment === o ? "✓" : "") + '</span><strong>' + esc(o) + '</strong></button>';
+    }).join("") + '</div><div class="live-note"><label>客户原话 / 现场信号</label><textarea id="liveVisitNote" placeholder="例如: 周主任表示周三 MDT 可以拿一例患者一起讨论..."></textarea></div></div>';
+  }
+
+  function renderVisitLive() {
+    var visit = repVisitById(state.repSelectedVisit);
+    if (!visit) return '<div class="empty-state"><strong>没有选中的拜访</strong></div>';
+    var doc = data.doctors.find(function (x) { return x.id === visit.doctorId; }) || data.doctors[0];
+    var session = liveVisitSession();
+    var p = doc.preVisit || {};
+    var tabs = [["evidence","证据"],["objection","异议"],["commitment","承诺"]].map(function(t){
+      return '<button class="live-tab ' + (state.liveVisitTab===t[0]?"active":"") + '" data-live-tab="' + t[0] + '">' + t[1] + '</button>';
+    }).join("");
+    var body = state.liveVisitTab === "objection" ? renderLiveObjections(doc,session) : (state.liveVisitTab === "commitment" ? renderLiveCommitment(doc,visit,session) : renderLiveEvidence(doc));
+    return '<div class="visit-live-shell">' +
+      '<div class="visit-live-top"><div><span class="live-dot"></span><span>VISIT MODE</span><strong>' + esc(visit.doctor) + ' · ' + esc(visit.hospital.replace("华东大学附属第一医院","华东附一")) + '</strong></div><div class="live-top-actions"><button class="btn ghost" data-live-back>退出拜访中</button><button class="btn primary" data-live-finish ' + (!session.commitment ? 'disabled' : '') + '>形成承诺并结束</button></div></div>' +
+      '<div class="visit-live-context"><div><span>本次唯一目标</span><strong>' + esc(p.objective || visit.purpose) + '</strong></div><div><span>成功信号</span><strong>' + esc(visit.success) + '</strong></div></div>' +
+      '<div class="visit-live-grid"><aside class="live-cues"><span class="eyebrow">LIVE CUES</span><h3>现场只看 3 件事</h3><div class="live-cue"><b>1</b><div><strong>先问</strong><span>' + esc((p.questions||[])[0]||"确认医生当前关注") + '</span></div></div><div class="live-cue"><b>2</b><div><strong>再证据</strong><span>只调用与医生回答直接相关的证据.</span></div></div><div class="live-cue"><b>3</b><div><strong>最后承诺</strong><span>' + esc(p.commitment||visit.success) + '</span></div></div><div class="live-compliance"><span>合规提醒</span><p>仅使用已审核材料. 超出批准边界的问题转医学团队, 不现场自由扩展.</p></div></aside><main class="live-main"><div class="live-tabs">' + tabs + '</div><div class="live-body">' + body + '</div></main></div>' +
+    '</div>';
+  }
+
+  function finishLiveVisit() {
+    var visit = repVisitById(state.repSelectedVisit);
+    var session = liveVisitSession();
+    if (!visit || !session || !session.commitment) { showToast("请先形成一个明确客户承诺"); return; }
+    var note = $("#liveVisitNote");
+    if (note && note.value.trim()) session.notes.push(note.value.trim());
+    session.ended = true;
+    session.endedAt = new Date().toISOString();
+    saveState();
+    if (visit.id === "rv2") state.selectedVisit = "v1";
+    else if (visit.id === "rv3") state.selectedVisit = "v3";
+    else state.selectedVisit = "v2";
+    state.route = "coaching";
+    state.role = "地区经理";
+    saveState();
+    render();
+    showToast("拜访已结束, 已进入语音复盘 / 辅导流程");
   }
 
   function renderDoctor() {
@@ -1294,7 +1453,7 @@
       state.role = role;
       state.session = { name: $("#loginName").value.trim() || "演示用户", role: role, loginAt: new Date().toISOString() };
       if (role === "销售总监") state.route = "cockpit";
-      else if (role === "医药代表") state.route = "doctor";
+      else if (role === "医药代表") state.route = "rep";
       else state.route = "dashboard";
       saveState();
       wrap.classList.add("hidden");
@@ -1420,7 +1579,9 @@
     });
 
     var view = "";
-    if (state.route === "hospital") view = renderHospital();
+    if (state.route === "rep") view = renderRep();
+    else if (state.route === "visitlive") view = renderVisitLive();
+    else if (state.route === "hospital") view = renderHospital();
     else if (state.route === "doctor") view = renderDoctor();
     else if (state.route === "coaching") view = renderCoaching();
     else if (state.route === "cockpit") view = renderCockpit();
@@ -1519,7 +1680,96 @@
       });
     });
 
-    $$("[data-doctor-id]").forEach(function (el) {
+    $("[data-rep-visit]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var visit = repVisitById(el.getAttribute("data-rep-visit"));
+        syncRepVisitSelection(visit);
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-rep-task]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var id = el.getAttribute("data-rep-task");
+        state.repQuickTasks[id] = !state.repQuickTasks[id];
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-rep-open-doctor]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.route = "doctor";
+        state.role = "医药代表";
+        render();
+      });
+    });
+
+    $("[data-rep-prepare]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.route = "doctor";
+        state.role = "医药代表";
+        render();
+        setTimeout(function(){ var p=$(".previsit-hero"); if(p) p.scrollIntoView({behavior:"smooth",block:"center"}); },50);
+      });
+    });
+
+    $("[data-rep-start-visit]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var session = liveVisitSession();
+        if (session) { session.started = true; session.startedAt = new Date().toISOString(); }
+        state.liveVisitTab = "evidence";
+        state.route = "visitlive";
+        state.role = "医药代表";
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-live-tab]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.liveVisitTab = el.getAttribute("data-live-tab");
+        render();
+      });
+    });
+
+    $("[data-live-back]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.route = "rep";
+        render();
+      });
+    });
+
+    $("[data-live-evidence]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        openEvidenceTrace(Number(el.getAttribute("data-live-evidence")));
+      });
+    });
+
+    $("[data-live-objection]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var session = liveVisitSession();
+        if (session) session.objection = el.getAttribute("data-objection-text");
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-live-commitment]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        var session = liveVisitSession();
+        if (session) session.commitment = el.getAttribute("data-commitment-text");
+        saveState();
+        render();
+      });
+    });
+
+    $("[data-live-finish]").forEach(function (el) {
+      el.addEventListener("click", finishLiveVisit);
+    });
+
+    $("[data-doctor-id]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.selectedDoctor = el.getAttribute("data-doctor-id");
         render();
@@ -1777,7 +2027,7 @@
       state.role = btn.getAttribute("data-role");
       $("#rolePopover").classList.remove("show");
       if (state.role === "销售总监") state.route = "cockpit";
-      else if (state.role === "医药代表") state.route = "doctor";
+      else if (state.role === "医药代表") state.route = "rep";
       else state.route = "dashboard";
       render();
       showToast("已切换到 " + state.role + " 工作视角");
