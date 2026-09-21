@@ -349,31 +349,58 @@
   function renderLearning() {
     var allRules = data.rules.concat(state.customRules || []);
     var validated = allRules.filter(function (r) { return r.status === "validated"; }).length;
+    var testing = allRules.length - validated;
+    var totalUses = allRules.reduce(function (sum, r) { return sum + Number(r.uses || 0); }, 0);
+    var summary = state.domainSummary || {};
+    var outcomeCount = Math.max(Number(summary.outcomes || 0), (state.outcomes || []).length);
+    var decisionCount = Math.max(Number(summary.decisions || 0), (state.recentDecisions || []).length);
+
     var cards = allRules.map(function (r) {
       return '<div class="rule-card"><div class="rule-head"><span class="rule-id">' + esc(r.id) + '</span><span class="status ' + (r.status === "validated" ? "done" : "doing") + '">' + (r.status === "validated" ? "已验证" : "验证中") + '</span></div><h4>' + esc(r.title) + '</h4><div class="rule-chain"><div class="rule-cell"><b>CONTEXT</b><span>' + esc(r.context) + '</span></div><div class="rule-cell"><b>DECISION</b><span>' + esc(r.decision) + '</span></div><div class="rule-cell"><b>ACTION</b><span>' + esc(r.action) + '</span></div><div class="rule-cell"><b>OUTCOME</b><span>' + esc(r.outcome) + '</span></div></div><div class="rule-foot"><span class="confidence">置信度 <strong>' + r.confidence + '%</strong> · 已调用 ' + r.uses + ' 次</span><button class="tiny-btn" data-rule="' + r.id + '">查看证据</button></div></div>';
     }).join("");
 
-    return '<div class="page-banner"><div><span class="banner-kicker">LEARNING ENGINE</span><h2>把冠军打法从个人经验变成组织资产</h2><p>每一个有效或无效的下一步行动, 都回流为 Context → Decision → Action → Outcome 证据, 持续更新 Decision Rules.</p></div><div class="banner-side"><strong>' + validated + '/' + allRules.length + '</strong><span>当前规则已验证</span></div></div>' +
+    var decisionRows = (state.recentDecisions || []).slice(0, 8).map(function (d) {
+      var nba = (state.recentNBAs || []).find(function (n) { return n.decisionId === d.id; });
+      return '<tr><td><span class="status todo">' + esc(d.decisionType) + '</span></td><td><b>' + esc(d.priorityScore) + '</b></td><td>' + esc(d.rationale) + '</td><td>' + esc((d.ruleIds || []).join(", ") || "-") + '</td><td>' + (nba ? esc(nba.what) : "-") + '</td></tr>';
+    }).join("");
+    if (!decisionRows) decisionRows = '<tr><td colspan="5" class="muted">还没有服务端 Decision Trace. 从 Hospital / Doctor / Coaching Agent 生成一次 NBA 即可产生.</td></tr>';
+
+    var outcomeRows = (state.outcomes || []).slice(0, 8).map(function (o) {
+      return '<tr><td><b>' + esc(o.result) + '</b></td><td>' + esc(o.signal) + '</td><td>' + esc(o.effectiveness) + '</td><td>' + esc(o.recordedBy || "-") + '</td></tr>';
+    }).join("");
+    if (!outcomeRows) outcomeRows = '<tr><td colspan="4" class="muted">暂无 Outcome. 生成 NBA 后点击“记录 Outcome”即可把真实业务信号回流.</td></tr>';
+
+    return '<div class="page-banner"><div><span class="banner-kicker">LEARNING ENGINE</span><h2>把冠军打法从个人经验变成组织资产</h2><p>每一个有效或无效的下一步行动, 都回流为 Context → Decision → NBA → Action → Outcome 证据, 持续更新 Decision Rules.</p></div><div class="banner-side"><strong>' + validated + '/' + allRules.length + '</strong><span>当前规则已验证</span></div></div>' +
       '<div class="learning-summary">' +
-        metric("规则总量", "128", "本月新增 11 条", "+11", "R") +
-        metric("已验证", "84", "跨区域重复成立", "+6", "验") +
-        metric("验证中", "31", "等待更多 Outcome", "", "测") +
-        metric("规则复用率", "71%", "进入 NBA 判断流程", "+9%", "%") +
+        metric("Decision Trace", String(decisionCount), "服务端已保存的结构化判断", "", "D") +
+        metric("Outcome", String(outcomeCount), "真实业务信号回流", outcomeCount ? "+" + outcomeCount : "", "O") +
+        metric("验证中 Rule", String(testing), "等待更多 Outcome 证据", "", "测") +
+        metric("Rule 调用", String(totalUses), "进入 Decision Pipeline 的累计次数", "+" + totalUses, "R") +
       '</div>' +
-      panel("Decision Rules", "AI 不只记住内容, 更沉淀情境下的判断规则",
-        '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px" class="rule-grid">' + cards + '</div>',
-        '<button class="btn soft" id="newRuleBtn">+ 新建 Rule</button>'
-      ) +
-      '<div class="grid-equal mt-16">' +
-        panel("本周学习事件", "哪些 Outcome 正在改变规则",
-          '<div class="timeline"><div class="timeline-item done"><span class="timeline-dot"></span><b>滨江病例切入打法获得正向 Outcome</b><span>候选 Rule R-041, 正进入第二家同类医院验证.</span></div><div class="timeline-item"><span class="timeline-dot"></span><b>周敏拜访出现“证据先于探询”的负向证据</b><span>R-019 将增加“必须先确认决策标准”的前置条件.</span></div><div class="timeline-item"><span class="timeline-dot"></span><b>海川资源调整等待结果</b><span>两周后验证“先买信息再投资源”是否提高资源效率.</span></div></div>'
+      '<div class="grid-equal">' +
+        panel("最近 Decision Trace", "ContextSnapshot → Decision → NBA → Rule",
+          '<table class="risk-table"><thead><tr><th>类型</th><th>优先级</th><th>判断理由</th><th>Rules</th><th>NBA</th></tr></thead><tbody>' + decisionRows + '</tbody></table>',
+          '<button class="tiny-btn" id="refreshDecisionTrace">刷新</button>'
         ) +
-        panel("Rule 更新原则", "Human Review 保留行业判断权",
+        panel("Outcome 回流", "Action 是否真正改变了客户行为或业务里程碑",
+          '<table class="risk-table"><thead><tr><th>结果</th><th>业务信号</th><th>有效性</th><th>记录人</th></tr></thead><tbody>' + outcomeRows + '</tbody></table>'
+        ) +
+      '</div>' +
+      '<div class="mt-16">' +
+        panel("Decision Rules", "AI 不只记住内容, 更沉淀情境下的判断规则",
+          '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px" class="rule-grid">' + cards + '</div>',
+          '<button class="btn soft" id="newRuleBtn">+ 新建 Rule</button>'
+        ) +
+      '</div>' +
+      '<div class="grid-equal mt-16">' +
+        panel("Learning Loop", "从真实结果反推下一轮判断",
+          '<div class="flow-strip"><div class="flow-step active"><b>Context</b><span>事实 / 信号</span></div><div class="flow-step active"><b>Decision</b><span>规则 + 判断</span></div><div class="flow-step active"><b>NBA</b><span>下一步行动</span></div><div class="flow-step active"><b>Action</b><span>一线执行</span></div><div class="flow-step ' + (outcomeCount ? "active" : "") + '"><b>Outcome</b><span>真实结果</span></div><div class="flow-step ' + (outcomeCount ? "active" : "") + '"><b>Rule</b><span>验证 / 更新</span></div></div><div class="drawer-success mt-16"><span>→</span><span>Rule 不因为一次 AI 生成而自动“学会”. 必须有 Outcome 证据, 并在关键规则发布前保留 Human Review.</span></div>'
+        ) +
+        panel("Rule 更新原则", "专业判断、证据与合规门槛不能被模型绕过",
           '<div class="insight-card"><div class="insight-head"><strong>FACT</strong><span class="insight-tag">可追溯</span></div><p>真实行动、医生反馈、业务里程碑、知识证据.</p></div><div class="insight-card"><div class="insight-head"><strong>INFERENCE</strong><span class="insight-tag">需验证</span></div><p>Agent 对情境、优先级、因果关系的推断必须带置信度和验证计划.</p></div><div class="insight-card"><div class="insight-head"><strong>HUMAN REVIEW</strong><span class="insight-tag">关键门槛</span></div><p>高风险 NBA、医学边界和规则正式发布必须经过授权角色审核.</p></div>'
         ) +
       '</div>';
   }
-
 
   function renderHospitalEcology(h) {
     var name = esc(h.name);
@@ -840,6 +867,9 @@
 
     var newRule = $("#newRuleBtn");
     if (newRule) newRule.addEventListener("click", openRuleEditor);
+
+    var refreshDecisionTrace = $("#refreshDecisionTrace");
+    if (refreshDecisionTrace) refreshDecisionTrace.addEventListener("click", refreshDecisionData);
 
     var audio = $("#visitAudio");
     if (audio) audio.addEventListener("change", function () {
