@@ -281,9 +281,53 @@ window.ZG_DATA = {
     { id: "R-037", title: "决策链不清晰时优先购买信息", context: "培育型医院, 关键影响者与准入链路未知", decision: "暂停高成本活动资源", action: "优先完成生态图和影响关系验证", outcome: "减少低确定性资源消耗", confidence: 68, status: "testing", uses: 5 }
   ],
   risks: [
-    { level: "高", object: "华东附一 · 周敏", issue: "关键医生行动停留在证据展示, 尚未形成 MDT 行为承诺", owner: "李明", action: "经理协访 + 脚本替换" },
-    { level: "高", object: "刘晨", issue: "最近 3 次重点拜访均未形成明确下一步承诺", owner: "王芳", action: "进入辅导队列" },
-    { level: "中", object: "海川人民医院", issue: "准入决策链完整度仅 58%, 资源投入存在提前风险", owner: "李明", action: "暂停活动, 补齐生态图" },
-    { level: "中", object: "滨江中心医院", issue: "病例会已经获得口头意向, 但尚未锁定参与名单", owner: "赵倩", action: "48 小时内确认名单" }
+    {
+      id: "m1",
+      level: "高",
+      object: "华东附一 · 周敏",
+      targetType: "hospital",
+      targetId: "h1",
+      issue: "关键医生行动停留在证据展示, 尚未形成 MDT 行为承诺",
+      owner: "李明",
+      action: "经理协访 + 场景化医学支持",
+      recommended: "add",
+      reason: "Top 1 杠杆点已清晰, 当前缺的是场景匹配证据和经理协同, 不是更多泛化拜访."
+    },
+    {
+      id: "m2",
+      level: "高",
+      object: "刘晨",
+      targetType: "rep",
+      targetId: "v2",
+      issue: "最近 3 次重点拜访均未形成明确下一步承诺",
+      owner: "王芳",
+      action: "升级辅导并检查下一次承诺",
+      recommended: "escalate",
+      reason: "问题已经连续出现, 单次提醒不足以改变行为, 需要经理进入结构化辅导闭环."
+    },
+    {
+      id: "m3",
+      level: "中",
+      object: "海川人民医院",
+      targetType: "hospital",
+      targetId: "h3",
+      issue: "准入决策链完整度仅 58%, 资源投入存在提前风险",
+      owner: "李明",
+      action: "停止大型活动, 先补齐生态图",
+      recommended: "stop",
+      reason: "当前不确定性来自决策链而不是覆盖不足, 此时继续扩大活动投入的确定性很低."
+    },
+    {
+      id: "m4",
+      level: "中",
+      object: "滨江中心医院",
+      targetType: "hospital",
+      targetId: "h2",
+      issue: "病例会已经获得口头意向, 但尚未锁定参与名单",
+      owner: "赵倩",
+      action: "保持投入并在 48 小时内确认名单",
+      recommended: "keep",
+      reason: "方向已被客户认可, 当前需要把口头兴趣转成明确时间、参与人和病例清单."
+    }
   ]
 };
