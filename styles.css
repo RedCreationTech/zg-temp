@@ -327,3 +327,41 @@
 
 .review-close-actions{display:flex;align-items:center;gap:8px}
 @media(max-width:700px){.review-close-actions{width:100%;flex-direction:column}.review-close-actions .btn{width:100%}}
+
+
+/* Brief mode switch + Director / Executive views */
+.brief-toolbar-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.brief-mode-switch{display:inline-flex;padding:3px;border-radius:10px;background:#eef2f7;border:1px solid #e1e7ef}
+.brief-mode-switch button{height:30px;padding:0 12px;border:0;border-radius:7px;background:transparent;color:#738096;font-size:8px;font-weight:800;cursor:pointer}
+.brief-mode-switch button.active{background:#17233d;color:#fff;box-shadow:0 3px 10px rgba(25,40,70,.12)}
+.executive-health-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.health-card{position:relative;padding:14px;border-radius:12px;border:1px solid #e4e9f1;background:#fff;overflow:hidden}
+.health-card:after{content:"";position:absolute;right:-18px;top:-18px;width:70px;height:70px;border-radius:50%;opacity:.12}
+.health-card.green{border-color:#d7eadf;background:#f7fbf9}.health-card.green:after{background:#42b285}
+.health-card.yellow{border-color:#ebdfc3;background:#fffaf1}.health-card.yellow:after{background:#d9a34b}
+.health-card.red{border-color:#edd8d2;background:#fff7f5}.health-card.red:after{background:#d36e5f}
+.health-top{display:flex;align-items:center;gap:6px}.health-top b{font-size:7px;color:#718095}.health-light{width:8px;height:8px;border-radius:50%;background:#9aa6b6}
+.health-card.green .health-light{background:#42b285}.health-card.yellow .health-light{background:#d9a34b}.health-card.red .health-light{background:#d36e5f}
+.health-card>span{display:block;font-size:7px;color:#8b97a8;margin-top:10px;letter-spacing:.5px}.health-card>strong{display:block;font-size:24px;color:#3f4d65;margin-top:3px}.health-card>p{font-size:8px;color:#748196;line-height:1.5;margin:4px 0 0}
+.director-cover{background:linear-gradient(120deg,#192946,#2a4f68 62%,#357084)}
+.director-summary-list{display:flex;flex-direction:column;gap:8px}.director-summary-item{display:grid;grid-template-columns:28px 1fr;gap:9px;align-items:start;padding:9px;border-radius:9px;background:#f8fafc;border:1px solid #edf1f5}.director-summary-item>span{width:26px;height:26px;border-radius:8px;background:#17233d;color:#fff;display:grid;place-items:center;font-size:7px}.director-summary-item p{font-size:8px;color:#56647a;line-height:1.55;margin:2px 0 0}
+.attention-list{display:flex;flex-direction:column;gap:8px}.attention-card{padding:10px;border-radius:10px;border:1px solid #e7ecf3;background:#fafbfd}.attention-card.high{background:#fff6f3;border-color:#edd8d2}.attention-card.opportunity{background:#f3f8ff;border-color:#dce6fa}
+.attention-head{display:flex;justify-content:space-between;align-items:center}.attention-head>span{font-size:8px;color:#536179;font-weight:800}.attention-head>b{font-size:7px;color:#8995a8}.attention-card h3{font-size:9px;color:#43516a;line-height:1.5;margin:6px 0}
+.attention-current,.attention-rec{display:grid;grid-template-columns:38px 1fr;gap:7px;margin-top:6px}.attention-current span,.attention-rec span{font-size:7px;color:#8c98a9}.attention-current p,.attention-rec p{font-size:8px;line-height:1.45;margin:0;color:#68768a}.attention-rec p{color:#405b82;font-weight:700}
+.director-table-wrap{overflow:auto}.director-table{width:100%;border-collapse:collapse;min-width:650px}.director-table th{font-size:7px;color:#8a96a8;text-align:left;padding:8px;border-bottom:1px solid #e6ebf2}.director-table td{padding:10px 8px;border-bottom:1px solid #eef2f5}.director-table td:first-child b{display:block;font-size:9px;color:#41506a}.director-table td:first-child span{display:block;font-size:7px;color:#97a2b2;margin-top:2px}.director-progress{display:grid;grid-template-columns:90px 36px;gap:7px;align-items:center}.director-progress b{font-size:8px;color:#58667c}.territory-risk{display:inline-flex;padding:4px 7px;border-radius:7px;font-size:7px;font-weight:800}.territory-risk.low{background:#eaf7f1;color:#2f8a69}.territory-risk.medium{background:#fff6e8;color:#b77a30}.territory-risk.high{background:#fff0ec;color:#bd6255}
+.executive-brief{max-width:1080px}
+.executive-cover{display:flex;justify-content:space-between;gap:20px;padding:24px;border-radius:16px;background:linear-gradient(125deg,#111d33,#213a58 62%,#305e6b);color:#fff}.executive-cover>div:first-child{min-width:0}.executive-cover>div:first-child>span{display:block;font-size:8px;letter-spacing:1.2px;color:#8fa8d1;font-weight:800}.executive-cover h1{font-size:26px;margin:7px 0}.executive-cover p{font-size:11px;line-height:1.65;color:#c3cee0;margin:0;max-width:700px}.executive-cover>div:last-child{text-align:right}.executive-cover>div:last-child>strong{display:block;font-size:28px}.executive-cover>div:last-child>span{font-size:8px;color:#9fb0cb}
+.executive-brief .executive-health-grid{margin-top:12px}
+.executive-summary-panel{margin-top:12px;padding:16px;border-radius:13px;background:#fff;border:1px solid #e3e8f0}.executive-summary-title>span{font-size:7px;letter-spacing:1px;color:#6982c5;font-weight:800}.executive-summary-title h2{font-size:13px;margin:4px 0 10px;color:#3f4e66}.executive-summary-items{display:grid;grid-template-columns:1fr 1fr;gap:8px}.executive-summary-items>div{display:grid;grid-template-columns:26px 1fr;gap:8px;padding:10px;border-radius:9px;background:#f8fafc}.executive-summary-items>div>span{width:24px;height:24px;border-radius:7px;background:#17233d;color:#fff;display:grid;place-items:center;font-size:7px}.executive-summary-items p{font-size:8px;color:#56647b;line-height:1.5;margin:1px 0 0}
+.executive-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.executive-card{padding:15px;border-radius:13px;background:#fff;border:1px solid #e3e8f0}.executive-card>span{display:block;font-size:7px;letter-spacing:.9px;color:#7387b7;font-weight:800}.executive-card h3{font-size:12px;color:#40506a;margin:4px 0 10px}.executive-attention{display:flex;flex-direction:column;gap:8px}.executive-attention>div{padding:9px;border-radius:9px;background:#fafbfd;border:1px solid #e9edf3}.executive-attention b{font-size:8px;color:#46546b}.executive-attention p{font-size:8px;color:#647287;line-height:1.45;margin:4px 0}.executive-attention small{font-size:7px;color:#4c678f}
+.executive-champion{padding:12px;border-radius:10px;background:#f6f9ff;border:1px solid #dce5fa}.executive-champion strong{font-size:11px;color:#40527c}.executive-champion p{font-size:8px;color:#71809a;line-height:1.5;margin:6px 0}.executive-champion small{font-size:7px;color:#61728f}
+.executive-next{margin-top:12px;padding:16px;border-radius:13px;background:linear-gradient(135deg,#f4f7ff,#fff);border:1px solid #d9e3f8}.executive-next>div:first-child span{font-size:7px;letter-spacing:1px;color:#647fc5;font-weight:800}.executive-next h2{font-size:14px;margin:4px 0 10px;color:#3e4f73}.executive-next-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.executive-next-grid>div{padding:10px;border-radius:9px;background:#fff;border:1px solid #e2e8f3}.executive-next-grid>div>span{font-size:7px;color:#6680c7;font-weight:800}.executive-next-grid strong{display:block;font-size:9px;color:#43516a;line-height:1.45;margin-top:3px}.executive-next-grid p{font-size:7px;color:#8a96a8;line-height:1.4;margin:5px 0 0}
+@media(max-width:1000px){.executive-health-grid,.executive-grid,.executive-summary-items,.executive-next-grid{grid-template-columns:1fr}.executive-cover{flex-direction:column}.executive-cover>div:last-child{text-align:left}}
+@media(max-width:700px){.brief-toolbar-left{width:100%;flex-direction:column;align-items:flex-start}.brief-mode-switch{width:100%}.brief-mode-switch button{flex:1}.brief-toolbar>div:last-child{width:100%;display:grid;grid-template-columns:1fr}.brief-toolbar .btn{width:100%}}
+@media print{
+  .brief-mode-switch{display:none!important}
+  .director-brief,.executive-brief{max-width:none!important}
+  .executive-cover{padding:15px 16px}
+  .executive-cover h1{font-size:18px}
+  .executive-summary-panel,.executive-card,.executive-next,.health-card{break-inside:avoid}
+}
