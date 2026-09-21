@@ -171,3 +171,10 @@
 
 @media(max-width:1000px){.rep-layout{grid-template-columns:1fr}.visit-live-grid{grid-template-columns:1fr}.live-cues{display:none}.visit-live-shell{margin:-20px -16px -44px}.visit-live-top{top:78px}.live-evidence-list,.live-objection-grid{grid-template-columns:1fr}}
 @media(max-width:650px){.rep-visit-card{grid-template-columns:52px 1fr}.rep-visit-state{grid-column:2;text-align:left}.rep-selected-head{flex-direction:column}.rep-work-grid{grid-template-columns:1fr}.rep-actions{flex-direction:column}.rep-actions .btn{width:100%}.visit-live-top{height:auto;padding:11px 14px;align-items:flex-start;gap:10px;flex-direction:column}.visit-live-context{grid-template-columns:1fr}.live-main{padding:14px}.commitment-options{grid-template-columns:1fr}}
+
+
+.field-return{margin:0 0 14px;padding:12px 14px;border-radius:11px;background:linear-gradient(135deg,#eef9f4,#f7fcfa);border:1px solid #d5ebdf}
+.field-return>span{display:block;font-size:7px;letter-spacing:.9px;color:#388365;font-weight:800}
+.field-return>strong{display:block;font-size:10px;color:#315f4e;margin-top:4px}
+.field-return>p{font-size:9px;color:#527364;line-height:1.55;margin:5px 0 0}
+.field-return>small{display:block;font-size:8px;color:#7a9488;margin-top:5px}
