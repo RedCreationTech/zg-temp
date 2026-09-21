@@ -12,7 +12,8 @@
     cockpit: "总监驾驶舱",
     pilot: "Pilot 运营",
     learning: "组织学习",
-    guardrails: "合规与安全"
+    guardrails: "合规与安全",
+    admin: "组织与权限"
   };
 
   var saved = {};
@@ -33,7 +34,11 @@
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
     customRules: saved.customRules || [],
-    session: saved.session || null
+    session: saved.session || null,
+    org: null,
+    audit: [],
+    crmSync: null,
+    runtimeOnline: null
   };
 
   var $ = function (selector, root) { return (root || document).querySelector(selector); };
@@ -542,7 +547,91 @@
       wrap.classList.add("hidden");
       render();
       showToast("欢迎进入 " + role + " 工作视角");
+      window.ZG_API.createSession(state.session).then(function (result) {
+        if (result && result.session && !result.offline) {
+          state.session = result.session;
+          saveState();
+        }
+      });
     });
+  }
+
+
+  function renderAdmin() {
+    var org = state.org || { organization: { name: "ZG AI GPS Demo", regions: [] }, users: [], roles: [] };
+    var regions = (org.organization.regions || []).map(function (r) {
+      return '<div class="metric-card"><div class="metric-top"><span>' + esc(r.name) + '</span><span class="metric-icon">区</span></div><div class="metric-value">' + esc(r.hospitals) + '</div><div class="metric-foot"><span>' + esc(r.manager) + '</span><span> · ' + esc(r.reps) + ' 名代表</span></div></div>';
+    }).join("");
+    if (!regions) {
+      regions = '<div class="empty-state"><strong>正在加载组织数据</strong><span>浏览器离线模式下仍可使用核心 Agent 原型.</span></div>';
+    }
+
+    var users = (org.users || []).map(function (u) {
+      return '<tr><td><b>' + esc(u.name) + '</b></td><td>' + esc(u.role) + '</td><td>' + esc(u.region) + '</td><td><span class="status todo">' + esc(u.scope) + '</span></td></tr>';
+    }).join("");
+    if (!users) users = '<tr><td colspan="4" class="muted">服务端组织数据尚未加载</td></tr>';
+
+    var roles = (org.roles || []).map(function (r) {
+      var permissions = (r.permissions || []).map(function (p) { return '<span class="profile-tag">' + esc(p) + '</span>'; }).join("");
+      return '<div class="role-permission-card"><div class="flex-between"><strong>' + esc(r.role) + '</strong><span class="soft-chip">' + (r.permissions || []).length + ' 权限</span></div><div class="profile-tags">' + permissions + '</div></div>';
+    }).join("");
+    if (!roles) roles = '<div class="empty-state"><strong>RBAC 数据等待服务端</strong><span>启动 npm start 后自动读取.</span></div>';
+
+    var auditRows = (state.audit || []).slice(0, 10).map(function (a) {
+      var at = a.at ? new Date(a.at).toLocaleString("zh-CN", { hour12: false }) : "-";
+      return '<tr><td>' + esc(at) + '</td><td><b>' + esc(a.actor) + '</b></td><td>' + esc(a.event) + '</td><td>' + esc(a.object) + '</td><td>' + esc(a.detail) + '</td></tr>';
+    }).join("");
+    if (!auditRows) auditRows = '<tr><td colspan="5" class="muted">暂无服务端审计事件. 执行登录、NBA 生成、行动完成或 CRM 同步后会自动记录.</td></tr>';
+
+    var mode = state.runtimeOnline ? "Pilot Server" : "Browser Mock";
+    return '<div class="page-banner"><div><span class="banner-kicker">ORGANIZATION & ACCESS</span><h2>组织、辖区、角色与审计</h2><p>把 Agent 的“聪明”放进企业边界里. 用户只能访问自己职责范围内的医院、医生、行动和管理视图, 所有关键操作留下审计轨迹.</p></div><div class="banner-side"><strong>' + mode + '</strong><span>当前运行模式</span></div></div>' +
+      '<div class="metric-grid">' + regions + '</div>' +
+      '<div class="grid-equal">' +
+        panel("用户与数据范围", "最小权限 + 角色工作台", '<table class="risk-table"><thead><tr><th>用户</th><th>角色</th><th>辖区</th><th>数据范围</th></tr></thead><tbody>' + users + '</tbody></table>') +
+        panel("RBAC 权限模型", "原型阶段使用角色权限, 后续可接企业 IAM / SSO", '<div class="permission-grid">' + roles + '</div>') +
+      '</div>' +
+      '<div class="mt-16">' +
+        panel("审计日志", "登录、AI 判断、规则、行动状态与外部同步均可追溯",
+          '<table class="risk-table"><thead><tr><th>时间</th><th>操作者</th><th>事件</th><th>对象</th><th>详情</th></tr></thead><tbody>' + auditRows + '</tbody></table>',
+          '<button class="btn soft" id="refreshAudit">刷新审计</button>'
+        ) +
+      '</div>';
+  }
+
+  async function refreshAudit() {
+    var result = await window.ZG_API.getAudit();
+    state.audit = result.audit || [];
+    if (state.route === "admin") render();
+  }
+
+  async function loadRuntimeContext() {
+    var health = await window.ZG_API.health();
+    state.runtimeOnline = !!(health && health.ok && !health.offline);
+    var mode = $("#runtimeMode");
+    if (mode) {
+      mode.innerHTML = '<span class="system-dot"></span>' + (state.runtimeOnline ? 'System of Action · Pilot Server' : 'System of Action · Browser Mock');
+    }
+
+    var boot = await window.ZG_API.bootstrap();
+    if (boot) {
+      state.actionStatus = Object.assign({}, boot.actionStatus || {}, state.actionStatus || {});
+      var combined = (boot.customRules || []).concat(state.customRules || []);
+      var seen = {};
+      state.customRules = combined.filter(function (r) {
+        if (!r || !r.id || seen[r.id]) return false;
+        seen[r.id] = true;
+        return true;
+      });
+      state.crmSync = boot.crmSync || null;
+      saveState();
+    }
+
+    var orgResult = await window.ZG_API.getOrg();
+    if (orgResult && orgResult.organization) state.org = orgResult;
+    var auditResult = await window.ZG_API.getAudit();
+    if (auditResult) state.audit = auditResult.audit || [];
+
+    if (state.route === "admin" || state.route === "guardrails" || state.route === "pilot") render();
   }
 
   function renderGuardrails() {
@@ -553,7 +642,7 @@
       '<div class="guard-card"><div class="guard-icon">' + icon("i-grid") + '</div><h3>部署方式</h3><p>支持 SaaS、私有化与混合架构, 根据客户 IT 和合规边界选择模型与数据流.</p><ul class="guard-list"><li>企业 SSO / IAM</li><li>模型与知识库可替换</li><li>关键数据不出域</li></ul></div>';
 
     var sources =
-      '<div class="source-row"><div><div class="source-name">CRM / SFE</div><div class="source-meta">医院、医生、互动、辖区</div></div><div class="source-meta">每 15 分钟同步</div><div class="source-health"><span class="health-dot"></span>正常</div><button class="tiny-btn">查看映射</button></div>' +
+      '<div class="source-row"><div><div class="source-name">CRM / SFE</div><div class="source-meta">医院、医生、互动、辖区</div></div><div class="source-meta">每 15 分钟同步</div><div class="source-health"><span class="health-dot"></span>正常</div><button class="tiny-btn" data-crm-sync>立即同步</button></div>' +
       '<div class="source-row"><div><div class="source-name">医学知识库</div><div class="source-meta">指南、研究、证据、批准材料</div></div><div class="source-meta">版本 2026.09</div><div class="source-health"><span class="health-dot"></span>正常</div><button class="tiny-btn">证据策略</button></div>' +
       '<div class="source-row"><div><div class="source-name">拜访记录 / 语音复盘</div><div class="source-meta">转写、结构化片段、Outcome</div></div><div class="source-meta">实时 / 批量</div><div class="source-health"><span class="health-dot"></span>正常</div><button class="tiny-btn">隐私策略</button></div>' +
       '<div class="source-row"><div><div class="source-name">Decision Rules</div><div class="source-meta">组织打法与判断规则</div></div><div class="source-meta">128 条规则</div><div class="source-health"><span class="health-dot warn"></span>31 条验证中</div><button class="tiny-btn">进入规则库</button></div>';
@@ -583,6 +672,7 @@
     else if (state.route === "pilot") view = renderPilot();
     else if (state.route === "learning") view = renderLearning();
     else if (state.route === "guardrails") view = renderGuardrails();
+    else if (state.route === "admin") view = renderAdmin();
     else view = renderDashboard();
 
     $("#appContent").innerHTML = view;
@@ -670,6 +760,19 @@
         showToast(el.querySelector("strong").textContent + " · 已定位关系节点");
       });
     });
+
+    var crmSync = $("[data-crm-sync]");
+    if (crmSync) crmSync.addEventListener("click", async function () {
+      crmSync.disabled = true;
+      crmSync.textContent = "同步中...";
+      var result = await window.ZG_API.syncCRM({ actor: state.session && state.session.name, records: 1286 });
+      state.crmSync = result.crmSync || { status: "healthy", lastSyncedAt: new Date().toISOString(), records: 1286 };
+      showToast(result.offline ? "离线模式: 已模拟 CRM 同步" : "CRM / SFE 同步完成并写入审计");
+      render();
+    });
+
+    var refreshAuditBtn = $("#refreshAudit");
+    if (refreshAuditBtn) refreshAuditBtn.addEventListener("click", refreshAudit);
 
     var gen = $("#generateNba");
     if (gen) gen.addEventListener("click", function () {
@@ -777,11 +880,15 @@
   });
   $("#drawerDone").addEventListener("click", function () {
     if (!state.selectedAction) return;
-    state.actionStatus[state.selectedAction.id] = "done";
+    var actionId = state.selectedAction.id;
+    state.actionStatus[actionId] = "done";
     saveState();
     closeDrawer();
     showToast("行动已完成, 等待 Outcome 回流");
     render();
+    window.ZG_API.updateActionStatus(actionId, "done", state.session && state.session.name).then(function (result) {
+      if (result && !result.offline && state.route === "admin") refreshAudit();
+    });
   });
 
   $("#roleSwitch").addEventListener("click", function (event) {
@@ -846,4 +953,5 @@
 
   ensureLogin();
   render();
+  loadRuntimeContext();
 })();
