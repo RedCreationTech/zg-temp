@@ -195,7 +195,7 @@
         '<div class="nba-item"><b>WHY</b><span>' + esc(top.why) + '</span></div>' +
         '<div class="nba-item"><b>SUCCESS</b><span>' + esc(top.success) + '</span></div>' +
       '</div>' +
-      '<div class="flex-between mt-12"><span class="small-note">证据: 患者旅程 + 医院生态 + 历史互动 + 当前资源约束</span><button class="btn primary" data-custom-action="hospital">生成本周行动计划</button></div></div>';
+      '<div class="flex-between mt-12"><span class="small-note">证据: 患者旅程 + 医院生态 + 历史互动 + 当前资源约束</span><button class="btn primary" data-ai-generate="hospital">AI 生成本周行动计划</button></div></div>';
 
     var timeline =
       '<div class="timeline">' +
@@ -247,7 +247,7 @@
         panel("重点医生", "按下一步行动优先级排序", '<div class="doctor-list">' + list + '</div>') +
         '<div class="stack">' +
           panel(doc.name + ' · ' + doc.title, doc.hospital + ' · ' + doc.department,
-            '<div class="profile-head"><div class="profile-name"><h2>' + esc(doc.focus) + '</h2><p>当前态度: ' + esc(doc.support) + ' · 阶段: ' + esc(doc.stage) + '</p><div class="profile-tags">' + tags + '</div></div><button class="btn soft" data-custom-action="doctor">生成拜访 NBA</button></div>' +
+            '<div class="profile-head"><div class="profile-name"><h2>' + esc(doc.focus) + '</h2><p>当前态度: ' + esc(doc.support) + ' · 阶段: ' + esc(doc.stage) + '</p><div class="profile-tags">' + tags + '</div></div><button class="btn soft" data-ai-generate="doctor">AI 生成拜访 NBA</button></div>' +
             '<div class="signal-grid"><div class="signal-card"><b>关键触发场景</b><strong>NOW</strong><span>' + esc(doc.trigger) + '</span></div><div class="signal-card"><b>当前 GAP</b><strong>1 个</strong><span>' + esc(doc.gap) + '</span></div><div class="signal-card"><b>目标行为</b><strong>推进</strong><span>' + esc(doc.targetBehavior) + '</span></div>'
           ) +
           '<div class="grid-equal">' +
@@ -293,7 +293,7 @@
           '<div class="coaching-score"><div class="score-ring" style="background:conic-gradient(#5879df 0 ' + v.score + '%,#e8edf5 ' + v.score + '% 100%)"><div><strong>' + v.score + '</strong><span>综合得分</span></div></div><div>' + dims + '</div></div>'
         ) +
         panel("AI 首要判断", "下一次先改一个最影响结果的问题",
-          '<div class="insight-card"><div class="insight-head"><strong>' + esc(v.issue) + '</strong><span class="insight-tag">TOP 1</span></div><p>' + esc(v.summary) + '</p></div><div class="divider"></div><div class="flex-between"><span class="small-note">系统将改进点映射到下一次真实拜访</span><button class="btn soft" data-custom-action="coach">生成辅导 NBA</button></div>'
+          '<div class="insight-card"><div class="insight-head"><strong>' + esc(v.issue) + '</strong><span class="insight-tag">TOP 1</span></div><p>' + esc(v.summary) + '</p></div><div class="divider"></div><div class="flex-between"><span class="small-note">系统将改进点映射到下一次真实拜访</span><button class="btn soft" data-ai-generate="coaching">AI 生成辅导 NBA</button></div>'
         ) +
       '</div>' +
       '<section class="panel mt-16"><div class="panel-head"><div class="panel-title"><div><h3>结构化辅导工作台</h3><span>复盘 → 诊断 → 改进 → 演练 → 跟进</span></div></div></div><div class="panel-body"><div class="section-tabs">' + tabs + '</div>' + tabBody + '</div></section>' +
