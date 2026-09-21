@@ -120,6 +120,10 @@
     scalePortfolioFilter: saved.scalePortfolioFilter || "all",
     scalePortfolioResourcePlan: saved.scalePortfolioResourcePlan || {},
     scalePortfolioPatternRollout: saved.scalePortfolioPatternRollout || {},
+    scalePortfolioWaveOverrides: saved.scalePortfolioWaveOverrides || {},
+    scalePortfolioPace: saved.scalePortfolioPace || {},
+    scalePortfolioScenario: saved.scalePortfolioScenario || "balanced",
+    scalePortfolioReview: saved.scalePortfolioReview || null,
     actionFilter: "all",
     selectedAction: null,
     actionStatus: saved.actionStatus || {},
@@ -190,6 +194,10 @@
       scalePortfolioFilter: state.scalePortfolioFilter,
       scalePortfolioResourcePlan: state.scalePortfolioResourcePlan,
       scalePortfolioPatternRollout: state.scalePortfolioPatternRollout,
+      scalePortfolioWaveOverrides: state.scalePortfolioWaveOverrides,
+      scalePortfolioPace: state.scalePortfolioPace,
+      scalePortfolioScenario: state.scalePortfolioScenario,
+      scalePortfolioReview: state.scalePortfolioReview,
       actionStatus: state.actionStatus,
       customRules: state.customRules,
       session: state.session,
@@ -3820,6 +3828,239 @@
       }).join("") + '</div>';
   }
 
+  function portfolioWaveDefinitions() {
+    return [
+      { id:"w1", label:"WAVE 1", quarter:"Q4 2026", title:"当前季度", objective:"把正式扩区跑到可验证 Value, 同时只做下一候选的必要准备." },
+      { id:"w2", label:"WAVE 2", quarter:"Q1 2027", title:"下一季度", objective:"承接通过 Gate 的下一候选, 优先复制已验证 Champion Pattern." },
+      { id:"w3", label:"WAVE 3", quarter:"Q2 2027", title:"后续季度", objective:"保留高差异区域, 在数据与组织条件成熟后再进入正式复制." }
+    ];
+  }
+
+  function portfolioScenarioMeta(key) {
+    return {
+      conservative:{ label:"稳健", budget:78, parallel:1, buffer:25, note:"一次只推进一个核心区域, 保留较高资源缓冲." },
+      balanced:{ label:"平衡", budget:118, parallel:2, buffer:18, note:"允许 1 个正式扩区 + 1 个候选准备并行." },
+      accelerated:{ label:"加速", budget:158, parallel:3, buffer:10, note:"提高并行度, 但需要更严的资源与 Gate 纪律." }
+    }[key] || { label:"平衡", budget:118, parallel:2, buffer:18, note:"允许 1 个正式扩区 + 1 个候选准备并行." };
+  }
+
+  function portfolioPaceMeta(key) {
+    return {
+      accelerate:{ label:"加速", cls:"accelerate", factor:1.15 },
+      normal:{ label:"保持", cls:"normal", factor:1 },
+      pause:{ label:"暂停", cls:"pause", factor:.3 },
+      defer:{ label:"延后", cls:"defer", factor:.72 }
+    }[key] || { label:"保持", cls:"normal", factor:1 };
+  }
+
+  function portfolioBaseWaveMap(regions) {
+    var map = { "pilot-east1":"baseline" };
+    var active = portfolioActiveTargetId();
+    if (active) map[active] = "w1";
+    var candidates = portfolioCandidateRanking(regions);
+    candidates.forEach(function(r,i){
+      map[r.id] = "w" + Math.min(3,active ? i+2 : i+1);
+    });
+    return map;
+  }
+
+  function portfolioWaveMap(regions) {
+    var map = portfolioBaseWaveMap(regions);
+    var active = portfolioActiveTargetId();
+    Object.keys(state.scalePortfolioWaveOverrides || {}).forEach(function(id){
+      if (id === "pilot-east1" || id === active) return;
+      var wave = state.scalePortfolioWaveOverrides[id];
+      if (wave === "w1" || wave === "w2" || wave === "w3") map[id] = wave;
+    });
+    return map;
+  }
+
+  function portfolioWaveNumber(waveId) {
+    return waveId === "w1" ? 1 : (waveId === "w2" ? 2 : (waveId === "w3" ? 3 : 0));
+  }
+
+  function portfolioRegionPace(regionId) {
+    return (state.scalePortfolioPace || {})[regionId] || "normal";
+  }
+
+  function movePortfolioWave(regionId,delta) {
+    if (regionId === "pilot-east1") return;
+    var active = portfolioActiveTargetId();
+    if (regionId === active) {
+      showToast("当前正式扩区已进入 90 天计划, Wave 1 锁定. 可用“暂停”调整总部节奏, 不直接改写执行计划");
+      return;
+    }
+    var regions = scalePortfolioRegions();
+    var map = portfolioWaveMap(regions);
+    var current = portfolioWaveNumber(map[regionId] || "w3");
+    var next = Math.max(1,Math.min(3,current + Number(delta || 0)));
+    if (!state.scalePortfolioWaveOverrides) state.scalePortfolioWaveOverrides = {};
+    state.scalePortfolioWaveOverrides[regionId] = "w" + next;
+    saveState();
+    render();
+    showToast("已移动到 Wave " + next);
+  }
+
+  function setPortfolioPace(regionId,pace) {
+    if (regionId === "pilot-east1") return;
+    var active = portfolioActiveTargetId();
+    if (regionId === active && pace === "defer") {
+      showToast("正式扩区区域不能在 Portfolio 中直接延后. 可先标记“暂停”, 再回到 90 天 Gate 做正式调整");
+      return;
+    }
+    if (!state.scalePortfolioPace) state.scalePortfolioPace = {};
+    if (!state.scalePortfolioWaveOverrides) state.scalePortfolioWaveOverrides = {};
+    state.scalePortfolioPace[regionId] = pace;
+    if (regionId !== active && pace === "accelerate") {
+      var regions = scalePortfolioRegions();
+      var map = portfolioWaveMap(regions);
+      var current = portfolioWaveNumber(map[regionId] || "w3");
+      if (current > 1) state.scalePortfolioWaveOverrides[regionId] = "w" + (current-1);
+    }
+    if (regionId !== active && pace === "defer") {
+      var regions2 = scalePortfolioRegions();
+      var map2 = portfolioWaveMap(regions2);
+      var current2 = portfolioWaveNumber(map2[regionId] || "w1");
+      if (current2 < 3) state.scalePortfolioWaveOverrides[regionId] = "w" + (current2+1);
+    }
+    saveState();
+    render();
+    showToast("区域节奏 · " + portfolioPaceMeta(pace).label);
+  }
+
+  function portfolioRegionBudget(region) {
+    var effort = region.effort === "高" ? 18 : (region.effort === "中" ? 11 : 5);
+    var base = region.id === "pilot-east1"
+      ? 42
+      : Math.round(20 + Number(region.hospitals || 0)*4 + Number(region.reps || 0)*3 + effort);
+    return Math.max(8,Math.round(base * portfolioPaceMeta(portfolioRegionPace(region.id)).factor));
+  }
+
+  function portfolioWaveSummary(regions,waveId) {
+    var scenario = portfolioScenarioMeta(state.scalePortfolioScenario);
+    var map = portfolioWaveMap(regions);
+    var list = regions.filter(function(r){return map[r.id] === waveId;});
+    var budget = list.reduce(function(sum,r){return sum + portfolioRegionBudget(r);},0);
+    var running = list.filter(function(r){return portfolioRegionPace(r.id) !== "pause";}).length;
+    return {
+      regions:list,
+      budget:budget,
+      capacity:scenario.budget,
+      budgetPct:scenario.budget ? Math.round(budget/scenario.budget*100) : 0,
+      running:running,
+      parallel:scenario.parallel,
+      budgetOver:budget > scenario.budget,
+      parallelOver:running > scenario.parallel
+    };
+  }
+
+  function renderPortfolioWavePlanner(regions) {
+    var map = portfolioWaveMap(regions);
+    var scenarios = ["conservative","balanced","accelerated"].map(function(key){
+      var meta = portfolioScenarioMeta(key);
+      return '<button class="' + (state.scalePortfolioScenario===key ? "active" : "") + '" data-portfolio-scenario="' + key + '"><strong>' + esc(meta.label) + '</strong><span>' + meta.budget + ' 资源点 / Wave · 并行 ' + meta.parallel + '</span><small>' + esc(meta.note) + '</small></button>';
+    }).join("");
+
+    var columns = portfolioWaveDefinitions().map(function(wave){
+      var summary = portfolioWaveSummary(regions,wave.id);
+      var rows = summary.regions.map(function(r){
+        var pace = portfolioPaceMeta(portfolioRegionPace(r.id));
+        var active = r.id === portfolioActiveTargetId();
+        return '<div class="wave-region ' + pace.cls + '"><div class="wave-region-head"><div><span>' + (active ? "FORMAL SCALE" : (r.type==="candidate" ? "PLANNED CANDIDATE" : "REGION")) + '</span><strong>' + esc(r.name) + '</strong></div><b>' + portfolioRegionBudget(r) + '</b></div><div class="wave-region-meta"><span>' + esc(pace.label) + '</span><span>' + (r.value == null ? "Value 未验证" : "Value " + r.value + "%") + '</span><span>' + (r.repeatability == null ? "Repeat 未验证" : "Repeat " + r.repeatability + "%") + '</span></div><div class="wave-region-actions">' +
+          (active
+            ? '<span>Wave 1 已锁定</span>'
+            : '<button data-portfolio-wave-move="' + r.id + '" data-portfolio-wave-delta="-1" ' + (map[r.id]==="w1" ? "disabled" : "") + '>← 提前</button><button data-portfolio-wave-move="' + r.id + '" data-portfolio-wave-delta="1" ' + (map[r.id]==="w3" ? "disabled" : "") + '>延后 →</button>') +
+          '</div></div>';
+      }).join("");
+      var tone = summary.budgetOver || summary.parallelOver ? "risk" : "good";
+      return '<div class="wave-column ' + tone + '"><div class="wave-column-head"><div><span>' + esc(wave.label) + '</span><strong>' + esc(wave.quarter) + ' · ' + esc(wave.title) + '</strong><p>' + esc(wave.objective) + '</p></div><div><b>' + summary.budget + '/' + summary.capacity + '</b><span>资源点</span></div></div><div class="wave-capacity"><span>并行 ' + summary.running + '/' + summary.parallel + '</span><div class="bar"><i style="width:' + Math.min(100,summary.budgetPct) + '%"></i></div><b>' + summary.budgetPct + '%</b></div><div class="wave-region-list">' + (rows || '<div class="brief-muted">当前 Wave 尚未安排区域.</div>') + '</div>' + ((summary.budgetOver || summary.parallelOver) ? '<div class="wave-warning">! 当前 Wave 超过' + (summary.budgetOver ? "预算容量" : "") + (summary.budgetOver && summary.parallelOver ? "与" : "") + (summary.parallelOver ? "并行上限" : "") + '</div>' : '') + '</div>';
+    }).join("");
+
+    return '<section class="portfolio-section wave-planner"><div class="portfolio-section-head"><div><span>WAVE PLANNING · Q4 2026 → Q2 2027</span><h2>季度级 Rollout Roadmap</h2><p>Wave 是总部资源编排层. 候选区域进入某个 Wave 不代表已经通过 Scale Gate, 只有正式扩区区域才进入 90 天执行.</p></div></div><div class="portfolio-scenarios">' + scenarios + '</div><div class="wave-grid">' + columns + '</div></section>';
+  }
+
+  function renderPortfolioPaceControls(region) {
+    if (!region || region.id === "pilot-east1") {
+      return '<div class="portfolio-pace-note">Pilot 基准区保持运行, 不参与 Wave 节奏模拟.</div>';
+    }
+    var current = portfolioRegionPace(region.id);
+    var active = region.id === portfolioActiveTargetId();
+    return '<div class="portfolio-pace"><span>总部节奏</span><div>' + ["accelerate","normal","pause","defer"].map(function(key){
+      var meta = portfolioPaceMeta(key);
+      var disabled = active && key === "defer";
+      return '<button class="' + (current===key ? "active "+meta.cls : "") + '" data-portfolio-pace="' + region.id + '" data-portfolio-pace-value="' + key + '" ' + (disabled ? "disabled" : "") + '>' + esc(meta.label) + '</button>';
+    }).join("") + '</div><small>' + (active ? "暂停/加速只影响总部组合模拟. 正式变更仍需回到 90 天 Gate." : "加速/延后会同步移动候选区域的 Wave 位置.") + '</small></div>';
+  }
+
+  function renderPortfolioBenchmark(regions) {
+    var pilot = regions.find(function(r){return r.id === "pilot-east1";});
+    var rows = regions.map(function(r){
+      var value = r.value == null ? "未验证" : r.value + "%";
+      var repeat = r.repeatability == null ? "未验证" : r.repeatability + "%";
+      var valueGap = r.value == null || !pilot || pilot.value == null ? "-" : ((r.value-pilot.value>0?"+":"") + (r.value-pilot.value) + "pp");
+      var repeatGap = r.repeatability == null || !pilot || pilot.repeatability == null ? "-" : ((r.repeatability-pilot.repeatability>0?"+":"") + (r.repeatability-pilot.repeatability) + "pp");
+      return '<tr><td><strong>' + esc(r.name) + '</strong><span>' + esc(portfolioStageMeta(r.stage).label) + '</span></td><td>' + r.data + '%</td><td>' + (r.execution ? r.execution + "%" : "-") + '</td><td>' + value + '<small>' + valueGap + '</small></td><td>' + repeat + '<small>' + repeatGap + '</small></td><td>' + r.resource + '%</td></tr>';
+    }).join("");
+    return '<section class="portfolio-section"><div class="portfolio-section-head"><div><span>CROSS-REGION BENCHMARK</span><h2>跨区域 Benchmark</h2><p>华东一区作为已运行基准. 候选区域在正式运行前不会填充 Value / Repeatability, 避免把准备度误当结果.</p></div></div><div class="portfolio-table-wrap"><table class="portfolio-benchmark"><thead><tr><th>区域</th><th>Data</th><th>Execution</th><th>Value / Gap</th><th>Repeat / Gap</th><th>资源负荷</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>';
+  }
+
+  function buildPortfolioExecutiveReview(regions) {
+    var scenario = portfolioScenarioMeta(state.scalePortfolioScenario);
+    var active = regions.find(function(r){return r.type === "active";});
+    var ranking = portfolioCandidateRanking(regions);
+    var next = ranking[0];
+    var conflicts = portfolioResourceConflicts();
+    var waves = portfolioWaveDefinitions().map(function(w){
+      var s = portfolioWaveSummary(regions,w.id);
+      return { id:w.id,quarter:w.quarter,budget:s.budget,capacity:s.capacity,running:s.running,parallel:s.parallel,budgetOver:s.budgetOver,parallelOver:s.parallelOver,regions:s.regions.map(function(r){return r.name;}) };
+    });
+    var overloaded = waves.filter(function(w){return w.budgetOver || w.parallelOver;});
+    var patternDone = regions.filter(function(r){return portfolioPatternStep(r.id)===3;}).length;
+    var actions = [];
+    if (active) actions.push({ title:"正式扩区", detail:active.name + " · " + portfolioStageMeta(active.stage).label + " · " + active.next });
+    if (overloaded.length) actions.push({ title:"Wave 容量调整", detail:overloaded.map(function(w){return w.quarter;}).join("、") + " 超出当前 " + scenario.label + " 情景容量, 需要移动区域或调整节奏." });
+    if (conflicts.length) actions.push({ title:"共享资源", detail:conflicts.map(function(x){return x.name;}).join("、") + " 存在资源冲突, 不建议继续增加并行复制." });
+    if (next) actions.push({ title:"下一候选", detail:next.name + " · 候选分 " + next.candidateScore + ". 保留为下一次 Scale Gate 的优先准备对象." });
+    actions.push({ title:"跨区复现", detail:"Champion Pattern 已在 " + patternDone + "/" + regions.length + " 个区域达到“已复现”, 继续通过 Repeatability Evidence 管理复制质量." });
+    if (!overloaded.length && !conflicts.length) actions.unshift({ title:"组合状态", detail:"当前 " + scenario.label + " 情景下, Wave 预算和共享资源均在可控范围内." });
+    return {
+      id:"portfolio-review-" + Date.now(),
+      generatedAt:new Date().toISOString(),
+      period:"Q4 2026 → Q2 2027",
+      scenario:scenario.label,
+      scenarioKey:state.scalePortfolioScenario,
+      activeRegion:active ? active.name : "暂无正式扩区",
+      nextRegion:next ? next.name : "暂无",
+      patternDone:patternDone,
+      patternTotal:regions.length,
+      conflicts:conflicts.map(function(x){return x.name;}),
+      waves:waves,
+      actions:actions.slice(0,5)
+    };
+  }
+
+  function generatePortfolioExecutiveReview() {
+    state.scalePortfolioReview = buildPortfolioExecutiveReview(scalePortfolioRegions());
+    saveState();
+    render();
+    showToast("季度 Portfolio Executive Review 已生成");
+  }
+
+  function renderPortfolioExecutiveReview(regions) {
+    var review = state.scalePortfolioReview;
+    if (!review) {
+      return '<section class="portfolio-executive-review empty"><div><span>PORTFOLIO EXECUTIVE REVIEW</span><h2>生成季度总部 Review</h2><p>把 Wave、预算容量、正式扩区、下一候选、共享资源和 Pattern 复制压缩成一页管理结论.</p></div><button class="btn primary" data-portfolio-review>生成季度 Review</button></section>';
+    }
+    var waveRows = (review.waves || []).map(function(w){
+      var risk = w.budgetOver || w.parallelOver;
+      return '<div class="review-wave ' + (risk ? "risk" : "good") + '"><span>' + esc(w.quarter) + '</span><strong>' + w.budget + '/' + w.capacity + ' 资源点</strong><small>' + w.running + '/' + w.parallel + ' 并行 · ' + (w.regions.length ? esc(w.regions.join(" / ")) : "未安排区域") + '</small></div>';
+    }).join("");
+    var actions = (review.actions || []).map(function(a,i){
+      return '<div class="review-action"><span>0' + (i+1) + '</span><div><strong>' + esc(a.title) + '</strong><p>' + esc(a.detail) + '</p></div></div>';
+    }).join("");
+    return '<section class="portfolio-executive-review"><div class="review-cover"><div><span>PORTFOLIO EXECUTIVE REVIEW · ' + esc(review.period) + '</span><h2>' + esc(review.scenario) + '情景 · 全国 Rollout 经营快照</h2><p>这是生成时的固定快照. 后续状态改变不会偷偷重写它, 需要点击“刷新 Review”重新生成.</p></div><div><strong>' + esc(review.activeRegion) + '</strong><span>当前正式扩区</span><small>下一候选 · ' + esc(review.nextRegion) + '</small></div></div><div class="review-summary-grid"><div><span>Champion Pattern</span><strong>' + review.patternDone + '/' + review.patternTotal + '</strong><small>区域已复现</small></div><div><span>共享资源冲突</span><strong>' + (review.conflicts || []).length + '</strong><small>' + ((review.conflicts || []).length ? esc(review.conflicts.join(" / ")) : "无") + '</small></div><div><span>Review ID</span><strong>' + esc(review.id.slice(-8)) + '</strong><small>' + esc(review.generatedAt.slice(0,10)) + '</small></div></div><div class="review-body-grid"><div><span>WAVE CAPACITY</span><div class="review-wave-list">' + waveRows + '</div></div><div><span>MANAGEMENT DECISIONS</span><div class="review-action-list">' + actions + '</div></div></div><div class="review-actions no-print"><button class="btn ghost" data-portfolio-print>打印 / 导出 PDF</button><button class="btn primary" data-portfolio-review>刷新 Review</button></div></section>';
+  }
+
   function renderScalePortfolio() {
     var regions = scalePortfolioRegions();
     var selected = portfolioSelectedRegion(regions);
@@ -3831,6 +4072,8 @@
     var activeCount = regions.filter(function(r){return r.type === "current" || r.type === "active";}).length;
     var highPressure = regions.filter(function(r){return r.resource >= 80;}).length;
     var stage = portfolioStageMeta(selected.stage);
+    var waveMap = portfolioWaveMap(regions);
+    var selectedWave = waveMap[selected.id] || "baseline";
 
     var filters = [
       ["all","全部区域"],
@@ -3860,20 +4103,22 @@
     actionItems.push({tone:"",title:"Champion Pattern 跨区复制",detail:"还有 " + patternPending + " 个区域尚未完成复现验证.",action:"推进复制",region:selected.id});
 
     return '<div class="portfolio-page">' +
-      '<section class="portfolio-hero"><div><span>HEADQUARTERS SCALE PORTFOLIO</span><h1>全国扩区不看“上线多少”, 看哪里已经产生价值, 哪里值得继续复制</h1><p>把 Pilot、在途 Scale、候选区域、资源容量和跨区 Pattern 复现放在同一张经营地图里.</p></div><div><strong>' + regions.length + '</strong><span>当前区域组合</span></div></section>' +
+      '<section class="portfolio-hero"><div><span>HEADQUARTERS SCALE PORTFOLIO</span><h1>全国扩区不看“上线多少”, 看哪里已经产生价值, 哪里值得继续复制</h1><p>把 Pilot、在途 Scale、候选区域、资源容量、季度 Wave 和跨区 Pattern 复现放在同一张经营地图里.</p></div><div><strong>' + regions.length + '</strong><span>当前区域组合</span></div></section>' +
       '<section class="portfolio-kpis"><div><span>运行中区域</span><strong>' + activeCount + '</strong><small>Pilot + 正式扩区</small></div><div><span>已形成基准</span><strong>' + proven + '</strong><small>Pilot / Scale Proven</small></div><div><span>资源高负荷</span><strong>' + highPressure + '</strong><small>负荷 ≥80%</small></div><div class="' + (conflicts.length ? "risk" : "good") + '"><span>资源冲突</span><strong>' + conflicts.length + '</strong><small>' + (conflicts.length ? "需总部重新分配" : "当前可控") + '</small></div><div><span>下一候选</span><strong>' + (next ? esc(next.name) : "-") + '</strong><small>' + (next ? "候选分 " + next.candidateScore : "暂无") + '</small></div></section>' +
+      renderPortfolioWavePlanner(regions) +
       '<section class="portfolio-section"><div class="portfolio-section-head"><div><span>REGION PORTFOLIO</span><h2>区域成熟度与价值验证</h2><p>当前运行状态来自现有 Pilot / Scale 前端状态, 候选区域只展示准备度, 不虚构业务 Value.</p></div><div class="portfolio-filters">' + filters + '</div></div><div class="portfolio-region-grid">' + renderPortfolioRegionCards(regions) + '</div></section>' +
-      '<section class="portfolio-detail-grid"><div class="portfolio-selected"><div class="portfolio-section-head compact"><div><span>SELECTED REGION</span><h2>' + esc(selected.name) + '</h2><p>' + esc(selected.note) + '</p></div><b class="portfolio-stage ' + stage.cls + '">' + esc(stage.label) + '</b></div><div class="portfolio-selected-metrics"><div><span>相似度</span><strong>' + selected.similarity + '%</strong></div><div><span>数据准备</span><strong>' + selected.data + '%</strong></div><div><span>执行</span><strong>' + selected.execution + '%</strong></div><div><span>资源负荷</span><strong>' + selected.resource + '%</strong></div></div><div class="portfolio-selected-next"><span>NEXT MANAGEMENT MOVE</span><strong>' + esc(selected.next) + '</strong></div><div class="portfolio-selected-actions">' + selectedActions + '</div></div>' +
+      '<section class="portfolio-detail-grid"><div class="portfolio-selected"><div class="portfolio-section-head compact"><div><span>SELECTED REGION · ' + esc(selectedWave === "baseline" ? "BASELINE" : selectedWave.toUpperCase()) + '</span><h2>' + esc(selected.name) + '</h2><p>' + esc(selected.note) + '</p></div><b class="portfolio-stage ' + stage.cls + '">' + esc(stage.label) + '</b></div><div class="portfolio-selected-metrics"><div><span>相似度</span><strong>' + selected.similarity + '%</strong></div><div><span>数据准备</span><strong>' + selected.data + '%</strong></div><div><span>执行</span><strong>' + selected.execution + '%</strong></div><div><span>资源负荷</span><strong>' + selected.resource + '%</strong></div></div><div class="portfolio-selected-next"><span>NEXT MANAGEMENT MOVE</span><strong>' + esc(selected.next) + '</strong></div>' + renderPortfolioPaceControls(selected) + '<div class="portfolio-selected-actions">' + selectedActions + '</div></div>' +
       '<div class="portfolio-ranking"><div class="portfolio-section-head compact"><div><span>NEXT TERRITORY</span><h2>下一批候选依据</h2><p>候选分只使用场景相似度、数据准备度和复制成本, 不把未验证的业务 Value 当成事实.</p></div></div><div class="portfolio-ranking-list">' + (rankingRows || '<div class="brief-muted">当前没有剩余候选区域.</div>') + '</div></div></section>' +
+      renderPortfolioBenchmark(regions) +
       '<section class="portfolio-section"><div class="portfolio-section-head"><div><span>SHARED RESOURCE CAPACITY</span><h2>跨区域共享资源</h2><p>同一批医学、数据、销售卓越和产品运营资源不能无限并行. 可以为当前选中区域预留下阶段容量.</p></div></div><div class="portfolio-resource-grid">' + renderPortfolioResourceBoard(selected,regions) + '</div></section>' +
       '<section class="portfolio-section">' + renderPortfolioPatternBoard(regions) + '</section>' +
       '<section class="portfolio-section"><div class="portfolio-section-head"><div><span>HQ ACTION BOARD</span><h2>总部下一步只处理这些事</h2><p>把区域进度、候选、资源和可复制打法汇成少量管理动作.</p></div></div><div class="portfolio-action-grid">' + actionItems.map(function(item){
         var attrs = item.route === "plan" ? " data-open-scale-plan" : (' data-portfolio-region="' + (item.region || selected.id) + '"');
         return '<button class="portfolio-action ' + item.tone + '"' + attrs + '><span>' + esc(item.action) + '</span><strong>' + esc(item.title) + '</strong><p>' + esc(item.detail) + '</p></button>';
       }).join("") + '</div></section>' +
+      renderPortfolioExecutiveReview(regions) +
     '</div>';
   }
-
 
   function commitScaleGateDecision(key) {
     var gate = scaleGateModel();
@@ -3923,9 +4168,9 @@
       state.scaleRecoveryPlans = {};
       state.scaleOwnerCommitments = {};
       state.scaleSecondWaveLaunch = { hospitals:{}, reps:{}, startedAt:null };
-    state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
-    state.scaleValueEvidence = {};
-    state.scaleRepeatabilityEvidence = {};
+      state.scaleSecondWaveRamp = { hospitals:{}, reps:{} };
+      state.scaleValueEvidence = {};
+      state.scaleRepeatabilityEvidence = {};
     }
     saveState();
     render();
@@ -4813,7 +5058,43 @@
       });
     });
 
-    $("[data-portfolio-filter]").forEach(function (el) {
+    $$("[data-portfolio-scenario]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.scalePortfolioScenario = el.getAttribute("data-portfolio-scenario") || "balanced";
+        saveState();
+        render();
+      });
+    });
+
+    $$("[data-portfolio-wave-move]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        movePortfolioWave(
+          el.getAttribute("data-portfolio-wave-move"),
+          Number(el.getAttribute("data-portfolio-wave-delta") || 0)
+        );
+      });
+    });
+
+    $$("[data-portfolio-pace]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        setPortfolioPace(
+          el.getAttribute("data-portfolio-pace"),
+          el.getAttribute("data-portfolio-pace-value") || "normal"
+        );
+      });
+    });
+
+    $$("[data-portfolio-review]").forEach(function (el) {
+      el.addEventListener("click", generatePortfolioExecutiveReview);
+    });
+
+    $$("[data-portfolio-print]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        window.print();
+      });
+    });
+
+    $$("[data-portfolio-filter]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.scalePortfolioFilter = el.getAttribute("data-portfolio-filter") || "all";
         saveState();
@@ -4821,7 +5102,7 @@
       });
     });
 
-    $("[data-portfolio-region]").forEach(function (el) {
+    $$("[data-portfolio-region]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.scalePortfolioSelected = el.getAttribute("data-portfolio-region") || "east2";
         saveState();
@@ -4829,7 +5110,7 @@
       });
     });
 
-    $("[data-portfolio-resource]").forEach(function (el) {
+    $$("[data-portfolio-resource]").forEach(function (el) {
       el.addEventListener("click", function () {
         togglePortfolioResource(
           el.getAttribute("data-portfolio-resource"),
@@ -4838,13 +5119,13 @@
       });
     });
 
-    $("[data-portfolio-pattern]").forEach(function (el) {
+    $$("[data-portfolio-pattern]").forEach(function (el) {
       el.addEventListener("click", function () {
         advancePortfolioPattern(el.getAttribute("data-portfolio-pattern"));
       });
     });
 
-    $("[data-portfolio-next-target]").forEach(function (el) {
+    $$("[data-portfolio-next-target]").forEach(function (el) {
       el.addEventListener("click", function () {
         var id = el.getAttribute("data-portfolio-next-target") || "east2";
         state.scaleGateTarget = id;
@@ -4855,7 +5136,7 @@
       });
     });
 
-    $("[data-scale-target]").forEach(function (el) {
+    $$("[data-scale-target]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.scaleGateTarget = el.getAttribute("data-scale-target") || "east2";
         saveState();
