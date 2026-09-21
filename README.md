@@ -319,6 +319,8 @@ GitHub Actions 在 push / pull request 时执行同样的检查。
 - `docs/API.md`
 - `docs/DOMAIN-MODEL.md`
 - `docs/STATE-MACHINE.md`
+- `docs/POSTGRESQL-MIGRATION.md`
+- `db/schema.sql`：PostgreSQL 15+ 正式数据模型
 
 ## 推荐演示路径
 
@@ -376,7 +378,12 @@ test/
 docs/
 ├── C4-ARCHITECTURE.md
 ├── API.md
-└── DOMAIN-MODEL.md
+├── DOMAIN-MODEL.md
+├── STATE-MACHINE.md
+└── POSTGRESQL-MIGRATION.md
+
+db/
+└── schema.sql
 ```
 
 运行时：
