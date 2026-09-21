@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0c1830" />
+  <title>ZG AI GPS｜医药销售行动系统</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+    <symbol id="i-hospital" viewBox="0 0 24 24"><path d="M4 21V6l8-3 8 3v15M8 9h2m4 0h2M8 13h2m4 0h2M10 21v-4h4v4M2 21h20"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.1 3.6-7 8-7s8 2.9 8 7"/></symbol>
+    <symbol id="i-coach" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5z"/><path d="M8 9h8M8 12h5"/></symbol>
+    <symbol id="i-cockpit" viewBox="0 0 24 24"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/><path d="M2 21h20"/></symbol>
+    <symbol id="i-rule" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.4 8.1-8 9-4.6-.9-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M16 16l5 5"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20h4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 9v5M12 18h.01"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h7a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4z"/><path d="M20 4h-4a2 2 0 0 0-2 2v14a3 3 0 0 1 3-3h3z"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">ZG</div>
+        <div>
+          <strong>AI GPS</strong>
+          <span>Pharma Sales</span>
+        </div>
+      </div>
+
+      <div class="system-pill">
+        <span class="system-dot"></span>
+        System of Action
+      </div>
+
+      <nav class="main-nav" aria-label="主导航">
+        <button class="nav-item active" data-route="dashboard">
+          <svg><use href="#i-grid"/></svg>
+          <span>今日行动</span>
+          <em>6</em>
+        </button>
+        <button class="nav-item" data-route="hospital">
+          <svg><use href="#i-hospital"/></svg>
+          <span>医院作战</span>
+        </button>
+        <button class="nav-item" data-route="doctor">
+          <svg><use href="#i-user"/></svg>
+          <span>医生导航</span>
+        </button>
+        <button class="nav-item" data-route="coaching">
+          <svg><use href="#i-coach"/></svg>
+          <span>拜访辅导</span>
+          <em class="warn">3</em>
+        </button>
+        <button class="nav-item" data-route="cockpit">
+          <svg><use href="#i-cockpit"/></svg>
+          <span>总监驾驶舱</span>
+        </button>
+        <div class="nav-divider"></div>
+        <button class="nav-item" data-route="learning">
+          <svg><use href="#i-rule"/></svg>
+          <span>组织学习</span>
+        </button>
+        <button class="nav-item" data-route="guardrails">
+          <svg><use href="#i-shield"/></svg>
+          <span>合规与安全</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="pilot-card">
+          <span>8 周 Pilot</span>
+          <strong>第 4 周 · 运行中</strong>
+          <div class="mini-progress"><i style="width:50%"></i></div>
+          <small>本周 18 / 24 个 NBA 已执行</small>
+        </div>
+        <div class="user-mini">
+          <div class="avatar">LM</div>
+          <div><strong>李明</strong><span>华东区 · 地区经理</span></div>
+          <button aria-label="更多">•••</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div class="topbar-title">
+          <button class="mobile-menu" id="mobileMenu">☰</button>
+          <div>
+            <span class="eyebrow">ZG PHARMA SALES AI GPS</span>
+            <h1 id="pageTitle">今日行动</h1>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="searchbox">
+            <svg><use href="#i-search"/></svg>
+            <input id="globalSearch" placeholder="搜索医院、医生、行动或规则" />
+            <kbd>⌘ K</kbd>
+          </div>
+          <button class="icon-btn" id="notifyBtn" aria-label="通知">
+            <svg><use href="#i-bell"/></svg>
+            <span class="notice-dot"></span>
+          </button>
+          <button class="role-switch" id="roleSwitch">
+            <span>当前角色</span>
+            <strong id="roleName">地区经理</strong>
+            <b>⌄</b>
+          </button>
+        </div>
+      </header>
+
+      <main id="appContent" class="content"></main>
+    </section>
+  </div>
+
+  <aside class="drawer" id="actionDrawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">NEXT BEST ACTION</span>
+        <h2 id="drawerTitle">下一步行动</h2>
+      </div>
+      <button class="close-btn" id="drawerClose">×</button>
+    </div>
+    <div id="drawerBody" class="drawer-body"></div>
+    <div class="drawer-foot">
+      <button class="btn ghost" id="drawerLater">稍后处理</button>
+      <button class="btn primary" id="drawerDone">
+        <svg><use href="#i-check"/></svg>
+        标记为已执行
+      </button>
+    </div>
+  </aside>
+  <div class="drawer-mask" id="drawerMask"></div>
+
+  <div class="toast" id="toast">
+    <span class="toast-icon">✓</span>
+    <span id="toastText">已更新</span>
+  </div>
+
+  <div class="role-popover" id="rolePopover">
+    <button data-role="地区经理"><span>RM</span><b>地区经理</b><small>医院作战 + 辅导</small></button>
+    <button data-role="医药代表"><span>REP</span><b>医药代表</b><small>医生行动 + 拜访</small></button>
+    <button data-role="销售总监"><span>DIR</span><b>销售总监</b><small>决策驾驶舱</small></button>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
