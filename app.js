@@ -1097,7 +1097,11 @@
         '<div class="team-rep-main"><div class="team-rep-head"><div><strong>' + esc(rep.name) + '</strong><span>' + esc(rep.territory) + ' · ' + esc(rep.coachingStatus) + '</span></div><span class="status ' + (rt.priority>=90?"risk":(rt.priority>=75?"doing":"done")) + '">' + esc(rep.issue) + '</span></div>' +
         '<div class="team-rep-insight"><p><b>重复出现 ' + esc(rep.repeated) + ' 次</b> · ' + esc(rep.risk) + '</p><span>下一步: ' + esc(rep.next) + '</span></div>' +
         '<div class="team-rep-meta"><div><span>最近拜访</span><strong>' + rt.score + '</strong><small>' + (trendDelta>=0?"+":"") + trendDelta + ' vs 上次</small></div><div><span>行为承诺率</span><strong>' + esc(rep.commitmentRate) + '%</strong></div><div><span>NBA 完成</span><strong>' + esc(rep.nbaCompletion) + '%</strong></div><div><span>陪练</span><strong class="' + (rt.practiceDone?"good-text":"") + '">' + esc(practiceLabel) + '</strong></div><div class="team-trend-cell"><span>4 次趋势</span>' + renderTeamTrend(rep) + '</div></div>' +
-        '<div class="team-rep-actions"><button class="btn ghost" data-team-detail="' + rep.id + '">查看拜访</button><button class="btn ' + (rt.practiceDone?"soft":"primary") + '" data-team-practice="' + rep.id + '">' + (rt.practiceDone?"查看陪练证据":"立即开始陪练") + '</button></div></div>' +
+        '<div class="team-rep-actions"><button class="btn ghost" data-team-detail="' + rep.id + '">查看拜访</button>' +
+        ((rep.id === "rep1" || rep.id === "rep2" || rep.id === "rep3")
+          ? '<button class="btn ' + (rt.practiceDone?"soft":"primary") + '" data-team-practice="' + rep.id + '">' + (rt.practiceDone?"查看陪练证据":"立即开始陪练") + '</button>'
+          : '<button class="btn soft" data-team-detail="' + rep.id + '">查看辅导建议</button>') +
+        '</div></div>' +
       '</article>';
     }).join("");
     if (!queue) queue = '<div class="empty-state"><strong>当前筛选没有代表</strong><span>换一个筛选条件查看团队情况.</span></div>';
@@ -1122,7 +1126,10 @@
       var rt = rep.runtime;
       var stateText = rt.practiceDone ? "已通过" : (rt.conversationRounds ? "进行中 " + rt.conversationRounds + "/4" : "未开始");
       var pct = rt.practiceDone ? 100 : Math.round(rt.conversationRounds/4*100);
-      return '<button class="practice-progress-card" data-team-practice="' + rep.id + '"><div><strong>' + esc(rep.name) + '</strong><span>' + esc(rep.issue) + '</span></div><div class="practice-progress-bar"><i style="width:' + pct + '%"></i></div><b>' + esc(stateText) + '</b></button>';
+      var targetAttr = (rep.id === "rep1" || rep.id === "rep2" || rep.id === "rep3")
+        ? 'data-team-practice="' + rep.id + '"'
+        : 'data-team-detail="' + rep.id + '"';
+      return '<button class="practice-progress-card" ' + targetAttr + '><div><strong>' + esc(rep.name) + '</strong><span>' + esc(rep.issue) + '</span></div><div class="practice-progress-bar"><i style="width:' + pct + '%"></i></div><b>' + esc(stateText) + '</b></button>';
     }).join("");
 
     return '<div class="page-banner"><div><span class="banner-kicker">TEAM COACHING WORKSPACE</span><h2>经理今天先辅导谁?</h2><p>先看团队里最影响结果、最可改进、最值得今天介入的行为, 再钻进一次具体拜访.</p></div><div class="banner-side"><strong>' + critical + '</strong><span>高优先辅导对象</span></div></div>' +
